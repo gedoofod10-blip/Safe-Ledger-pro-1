@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getClient, getTransactionsByClient, addTransaction as dbAddTransaction, updateTransaction, deleteTransaction as dbDeleteTransaction, updateClient, type Client, type Transaction } from '@/lib/db';
+import { getClient, getTransactionsByClient, updateTransaction, deleteTransaction as dbDeleteTransaction, updateClient, type Client, type Transaction } from '@/lib/db';
 import AppHeader from '@/components/AppHeader';
-import ClientNotesSheet from '@/components/ClientNotesSheet';
 import { Card, CardContent } from '@/components/ui/card';
-import { Share2, Plus, AlertTriangle, Pencil, Trash2, X, StickyNote, HelpCircle, MoreVertical, Search, Lock, ShieldAlert, Palette, FileDown, Type, Image as ImageIcon, FileSpreadsheet, ArrowDown, ArrowUp, CheckSquare, Square, ArrowLeftRight, Copy, Star } from 'lucide-react';
+import { Share2, Plus, Pencil, Trash2, X, StickyNote, MoreVertical, Search, ShieldAlert, Palette, FileDown, Type, Image as ImageIcon, FileSpreadsheet, ArrowDown, ArrowUp, CheckSquare, Square, Copy, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatNumber } from '@/lib/utils';
 import { exportLedgerPDF } from '@/lib/pdfExport';
 import { shareFileNative, shareTextNative, generateShareText, generateExcelFile } from '@/lib/sharing';
+import html2canvas from 'html2canvas';
 
 const LedgerPage = () => {
   const { clientId } = useParams<{ clientId: string }>();
@@ -34,7 +34,6 @@ const LedgerPage = () => {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [newLimit, setNewLimit] = useState('');
-  const [showCloseBalanceModal, setShowCloseBalanceModal] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
 
   // Selection & Context Menu States
@@ -155,7 +154,18 @@ const LedgerPage = () => {
     loadData();
   };
 
-  // ---------------- الدوال التي كانت مفقودة وتسببت بالشاشة البيضاء ---------------- //
+  const deleteSelectedTx = async () => {
+    if (selectedTxIds.length === 0) return;
+    for (const id of selectedTxIds) {
+      await dbDeleteTransaction(id);
+    }
+    setIsSelectionMode(false);
+    setSelectedTxIds([]);
+    toast.success('تم الحذف بنجاح');
+    loadData();
+  };
+
+  // Export Handlers
   const handleSharePDF = async () => {
     if (!client) return;
     toast.info('جاري تجهيز ملف PDF...');
@@ -188,8 +198,6 @@ const LedgerPage = () => {
   const handleShareImage = async () => {
     toast.info('جاري تجهيز الصورة، الرجاء الانتظار...');
     try {
-      const module = await import('html2canvas');
-      const html2canvas = (module as any).default || (module as any);
       const element = document.getElementById('ledger-content-to-capture');
       if (!element) return;
       const canvas = await html2canvas(element, { useCORS: true, scale: 2, backgroundColor: '#ffffff', logging: false });
@@ -203,24 +211,16 @@ const LedgerPage = () => {
     } catch (error) { toast.error('فشل إنشاء الصورة'); }
     setShowShareModal(false);
   };
-  // ----------------------------------------------------------------------------- //
 
   const renderRatingStars = () => {
     if (!client?.rating) return null;
     return (
       <div className="flex items-center gap-0.5" dir="ltr">
         {client.rating === 'excellent' && (
-          <>
-            <Star className="w-4 h-4 fill-green-500 text-green-500" />
-            <Star className="w-4 h-4 fill-green-500 text-green-500" />
-            <Star className="w-4 h-4 fill-green-500 text-green-500" />
-          </>
+          <><Star className="w-4 h-4 fill-green-500 text-green-500" /><Star className="w-4 h-4 fill-green-500 text-green-500" /><Star className="w-4 h-4 fill-green-500 text-green-500" /></>
         )}
         {client.rating === 'average' && (
-          <>
-            <Star className="w-4 h-4 fill-yellow-500 text-yellow-500" />
-            <Star className="w-4 h-4 fill-yellow-500 text-yellow-500" />
-          </>
+          <><Star className="w-4 h-4 fill-yellow-500 text-yellow-500" /><Star className="w-4 h-4 fill-yellow-500 text-yellow-500" /></>
         )}
         {client.rating === 'poor' && (
           <Star className="w-4 h-4 fill-red-500 text-red-500" />
@@ -244,7 +244,6 @@ const LedgerPage = () => {
         }
       />
 
-      {/* Dropdown Menu */}
       {showMenu && (
         <div className="fixed inset-0 z-50" onClick={() => setShowMenu(false)}>
           <div className="absolute top-14 left-4 w-60 bg-card border border-border shadow-2xl rounded-xl overflow-hidden animate-scale-in" onClick={e => e.stopPropagation()} dir="rtl">
@@ -267,35 +266,36 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* Selection Mode Header */}
       {isSelectionMode && (
         <div className="fixed top-0 left-0 right-0 h-14 bg-header text-header z-[60] flex items-center justify-between px-4 shadow-lg animate-fade-in" dir="rtl">
           <div className="flex items-center gap-4">
             <button onClick={() => {setIsSelectionMode(false); setSelectedTxIds([]);}} className="p-2 bg-white/20 rounded-lg"><X className="w-5 h-5"/></button>
             <span className="font-bold">{selectedTxIds.length} محدد</span>
           </div>
-          <button className="flex items-center gap-2 bg-red-500 px-4 py-1.5 rounded-lg text-sm font-bold shadow-md active:scale-95 transition-transform">حذف المحدد</button>
+          <button onClick={deleteSelectedTx} className="flex items-center gap-2 bg-red-500 px-4 py-1.5 rounded-lg text-sm font-bold shadow-md active:scale-95 transition-transform">حذف المحدد</button>
         </div>
       )}
 
-      {/* Budget Box */}
+      {/* تنسيق مربع السقف المالي الجديد */}
       {budgetLimit > 0 && (
         <div className="mx-3 mt-3 rounded-2xl overflow-hidden shadow-xl border border-white/10 animate-fade-in">
           <div className="bg-gradient-to-l from-[#5D4037] to-[#8D6E63] text-white p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex flex-col items-start">
-                <span className="text-[10px] font-bold opacity-80 mb-1">المتبقي من السقف</span>
+            <div className="flex justify-between items-end mb-4">
+              {/* الجهة اليمنى: المتبقي */}
+              <div className="flex flex-col text-right">
+                <span className="text-[11px] font-bold opacity-80 mb-1">المتبقي من السقف</span>
                 <span className={`text-4xl font-black tracking-tight ${isOverBudget ? 'text-red-400' : 'text-yellow-400'}`} dir="ltr">
                   {formatNumber(remaining)}
                 </span>
               </div>
+              {/* الجهة اليسرى: السقف والاستهلاك */}
               <div className="flex flex-col items-end gap-2">
-                <div className="bg-black/20 px-3 py-1 rounded-lg text-right">
-                  <span className="text-[10px] block opacity-70">السقف</span>
+                <div className="bg-black/20 px-3 py-1.5 rounded-lg flex flex-col items-end min-w-[80px]">
+                  <span className="text-[10px] opacity-70">السقف</span>
                   <span className="text-sm font-bold" dir="ltr">{formatNumber(budgetLimit)}</span>
                 </div>
-                <div className="bg-black/20 px-3 py-1 rounded-lg text-right">
-                  <span className="text-[10px] block opacity-70">الاستهلاك</span>
+                <div className="bg-black/20 px-3 py-1.5 rounded-lg flex flex-col items-end min-w-[80px]">
+                  <span className="text-[10px] opacity-70">الاستهلاك</span>
                   <span className="text-sm font-bold" dir="ltr">{formatNumber(totalDebit - totalCredit)}</span>
                 </div>
               </div>
@@ -307,7 +307,6 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* Transactions Table */}
       <div id="ledger-content-to-capture" className="p-3 flex-1 mt-2">
         <Card className="shadow-lg border-0 overflow-hidden rounded-2xl">
           <CardContent className="p-0">
@@ -325,7 +324,7 @@ const LedgerPage = () => {
               <div className="w-[75px] text-left">الرصيد</div>
             </div>
             <div className="divide-y divide-border/30 select-none" dir="rtl">
-              {transactions.filter(tx => (tx.details || '').includes(searchQuery) || (tx.amount || 0).toString().includes(searchQuery)).map((tx, idx) => (
+              {!loading && transactions.filter(tx => (tx.details || '').includes(searchQuery) || (tx.amount || 0).toString().includes(searchQuery)).map((tx, idx) => (
                 <div
                   key={tx.id || idx}
                   onTouchStart={() => handleTouchStart(tx)}
@@ -355,12 +354,15 @@ const LedgerPage = () => {
         </Card>
       </div>
 
-      {/* Bottom Bar */}
+      {/* توزيع الأزرار الصحيح: الزائد يمين والمشاركة يسار */}
       <footer className="fixed bottom-0 left-0 right-0 bg-[#5D4037] text-white p-3 z-40 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.15)]">
         <div className="flex items-center justify-between px-2 w-full">
-          <button onClick={() => setShowShareModal(true)} className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center active:scale-90 transition-transform">
-            <Share2 className="w-6 h-6" />
+          {/* الإضافة: أقصى اليمين */}
+          <button onClick={() => navigate(`/add-transaction?clientId=${client?.id}`)} className="w-14 h-14 bg-white text-[#5D4037] rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-transform">
+            <Plus className="w-8 h-8 font-black" />
           </button>
+
+          {/* الرصيد: في المنتصف */}
           <div className="flex flex-col items-center bg-black/20 py-2 px-6 rounded-2xl">
             <span className="text-[10px] font-bold opacity-70 mb-0.5">الرصيد النهائي</span>
             <div className="flex items-center gap-1" dir="rtl">
@@ -370,13 +372,14 @@ const LedgerPage = () => {
               </span>
             </div>
           </div>
-          <button onClick={() => navigate(`/add-transaction?clientId=${client?.id}`)} className="w-14 h-14 bg-white text-[#5D4037] rounded-2xl flex items-center justify-center shadow-lg active:scale-90 transition-transform">
-            <Plus className="w-8 h-8 font-black" />
+
+          {/* المشاركة: أقصى اليسار */}
+          <button onClick={() => setShowShareModal(true)} className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center active:scale-95 transition-transform">
+            <Share2 className="w-6 h-6" />
           </button>
         </div>
       </footer>
 
-      {/* Rating Modal */}
       {showRatingModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowRatingModal(false)}>
           <Card className="shadow-2xl w-full max-w-xs border-0 animate-scale-in rounded-3xl overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
@@ -386,21 +389,15 @@ const LedgerPage = () => {
             <CardContent className="p-5 space-y-3 bg-card">
               <button onClick={() => { handleRatingChange('excellent'); setShowRatingModal(false); }} className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all active:scale-95 ${client?.rating === 'excellent' ? 'border-green-500 bg-green-50' : 'border-border hover:bg-muted'}`}>
                 <span className="font-bold text-green-700">ممتاز في الدفع</span>
-                <div className="flex gap-1">
-                  <Star className="w-5 h-5 fill-green-500 text-green-500"/><Star className="w-5 h-5 fill-green-500 text-green-500"/><Star className="w-5 h-5 fill-green-500 text-green-500"/>
-                </div>
+                <div className="flex gap-1"><Star className="w-5 h-5 fill-green-500 text-green-500"/><Star className="w-5 h-5 fill-green-500 text-green-500"/><Star className="w-5 h-5 fill-green-500 text-green-500"/></div>
               </button>
               <button onClick={() => { handleRatingChange('average'); setShowRatingModal(false); }} className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all active:scale-95 ${client?.rating === 'average' ? 'border-yellow-500 bg-yellow-50' : 'border-border hover:bg-muted'}`}>
                 <span className="font-bold text-yellow-700">جيد في الدفع</span>
-                <div className="flex gap-1">
-                  <Star className="w-5 h-5 fill-yellow-500 text-yellow-500"/><Star className="w-5 h-5 fill-yellow-500 text-yellow-500"/>
-                </div>
+                <div className="flex gap-1"><Star className="w-5 h-5 fill-yellow-500 text-yellow-500"/><Star className="w-5 h-5 fill-yellow-500 text-yellow-500"/></div>
               </button>
               <button onClick={() => { handleRatingChange('poor'); setShowRatingModal(false); }} className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all active:scale-95 ${client?.rating === 'poor' ? 'border-red-500 bg-red-50' : 'border-border hover:bg-muted'}`}>
                 <span className="font-bold text-red-700">سيئ في الدفع</span>
-                <div className="flex gap-1">
-                  <Star className="w-5 h-5 fill-red-500 text-red-500"/>
-                </div>
+                <div className="flex gap-1"><Star className="w-5 h-5 fill-red-500 text-red-500"/></div>
               </button>
               <button onClick={() => setShowRatingModal(false)} className="w-full mt-2 bg-muted text-foreground py-3 rounded-xl font-bold hover:opacity-90">إلغاء</button>
             </CardContent>
@@ -408,7 +405,6 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* Edit Tx Modal */}
       {editingTx && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] z-[80] flex items-center justify-center p-4 animate-fade-in" onClick={() => setEditingTx(null)}>
           <Card className="w-full max-w-sm p-5 space-y-4 rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()} dir="rtl">
@@ -417,8 +413,8 @@ const LedgerPage = () => {
             <input type="text" className="w-full border p-3 rounded-xl outline-none" value={editDetails} onChange={e => setEditDetails(e.target.value)} placeholder="التفاصيل" />
             <input type="date" className="w-full border p-3 rounded-xl outline-none text-right" lang="en" dir="ltr" value={editDate} onChange={e => setEditDate(e.target.value)} />
             <div className="flex gap-4 justify-center py-2">
-              <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="edittype" checked={editType === 'debit'} onChange={() => setEditType('debit')} className="w-5 h-5" /><span className="font-bold">عليه</span></label>
-              <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="edittype" checked={editType === 'credit'} onChange={() => setEditType('credit')} className="w-5 h-5" /><span className="font-bold">له</span></label>
+              <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={editType === 'debit'} onChange={() => setEditType('debit')} className="w-5 h-5" /><span className="font-bold">عليه</span></label>
+              <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={editType === 'credit'} onChange={() => setEditType('credit')} className="w-5 h-5" /><span className="font-bold">له</span></label>
             </div>
             <div className="flex gap-2">
               <button onClick={saveEditTx} className="flex-1 bg-[#5D4037] text-white py-3 rounded-xl font-bold">حفظ</button>
@@ -428,7 +424,6 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* Context Menu for Single Transaction */}
       {contextMenuTx && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[70] flex items-center justify-center p-6 animate-fade-in" onClick={() => setContextMenuTx(null)}>
           <Card className="w-full max-w-xs shadow-2xl border-0 overflow-hidden animate-scale-in rounded-3xl" onClick={e => e.stopPropagation()} dir="rtl">
@@ -452,7 +447,6 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* Notes Sheet */}
       {showNotes && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[80] flex items-end justify-center animate-fade-in" onClick={() => setShowNotes(false)}>
           <div className="bg-card w-full max-h-[85vh] rounded-t-3xl p-6 overflow-y-auto animate-slide-up shadow-2xl border-t border-border" onClick={e => e.stopPropagation()} dir="rtl">
@@ -483,7 +477,6 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* Limit Modal */}
       {showLimitModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowLimitModal(false)}>
           <Card className="shadow-2xl w-full max-w-xs border-0 animate-scale-in rounded-3xl overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
@@ -504,7 +497,6 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* Color Picker Modal */}
       {showColorPicker && (
         <div className="fixed inset-0 bg-black/60 z-[90] flex items-center justify-center animate-fade-in" onClick={() => setShowColorPicker(false)}>
            <Card className="p-6 w-80 rounded-3xl shadow-2xl" onClick={e => e.stopPropagation()} dir="rtl">
@@ -525,7 +517,6 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* Share Modal */}
       {showShareModal && (
         <div className="fixed inset-0 bg-foreground/50 backdrop-blur-sm z-[100] flex items-end justify-center animate-fade-in" onClick={() => setShowShareModal(false)}>
           <div className="bg-card w-full rounded-t-3xl p-6 space-y-5 animate-slide-up shadow-2xl border-t border-border" onClick={e => e.stopPropagation()} dir="rtl">
@@ -561,91 +552,3 @@ const LedgerPage = () => {
 };
 
 export default LedgerPage;
-2. مراجعة القائمة الرئيسية (MainMenu.tsx) لتفادي أي أخطاء
-للتأكد تماماً من عدم وجود أي خطأ، قمت بضبط واردات (Imports) الملف، استخدم هذا الكود المضمون:
-
-TypeScript
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import AppHeader from '@/components/AppHeader';
-import { Card, CardContent } from '@/components/ui/card';
-import { toast } from 'sonner';
-import {
-  Plus, FileText, Settings, Share2, Info, LogOut, UserPlus, ChevronLeft
-} from 'lucide-react';
-
-const MainMenu = () => {
-  const navigate = useNavigate();
-  const [showAbout, setShowAbout] = useState(false);
-
-  const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({ 
-        title: 'دفتر الحسابات الآمن', 
-        text: 'تطبيق دفتر حسابات آمن ومشفر بالكامل لإدارة ديونك وحساباتك بسهولة', 
-        url: window.location.origin 
-      });
-    } else {
-      navigator.clipboard.writeText(window.location.origin);
-      toast.success('تم نسخ رابط التطبيق ✓');
-    }
-  };
-
-  const handleExit = () => {
-    navigate('/clients');
-  };
-
-  const menuItems = [
-    { icon: UserPlus, label: 'إضافة عميل', color: 'bg-blue-500/10 text-blue-600', action: () => navigate('/clients') },
-    { icon: Plus, label: 'إضافة مبلغ', color: 'bg-green-500/10 text-green-600', action: () => navigate('/add-transaction') },
-    { icon: FileText, label: 'التقارير', color: 'bg-purple-500/10 text-purple-600', action: () => navigate('/reports') },
-    { icon: Settings, label: 'الإعدادات', color: 'bg-gray-500/10 text-gray-600', action: () => navigate('/settings') },
-    { icon: Share2, label: 'مشاركة التطبيق', color: 'bg-cyan-500/10 text-cyan-600', action: handleShare },
-    { icon: Info, label: 'حول البرنامج', color: 'bg-amber-500/10 text-amber-600', action: () => setShowAbout(true) },
-    { icon: LogOut, label: 'خروج', color: 'bg-red-500/10 text-red-600', action: handleExit },
-  ];
-
-  return (
-    <div className="min-h-screen bg-background pb-6 flex flex-col" dir="rtl">
-      <AppHeader title="القائمة الرئيسية" showBack />
-      <div className="flex-1 p-4 overflow-y-auto">
-        <div className="flex flex-col gap-3">
-          {menuItems.map((item, i) => (
-            <button
-              key={i}
-              onClick={item.action}
-              className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-transparent hover:border-primary/20 active:scale-95 transition-all shadow-sm animate-fade-in ${item.color}`}
-              style={{ animationDelay: `${i * 50}ms` }}
-            >
-              <div className="p-3 rounded-xl bg-white/60 shadow-inner flex-shrink-0">
-                <item.icon className="w-6 h-6" />
-              </div>
-              <span className="text-base font-bold text-foreground text-right flex-1">{item.label}</span>
-              <ChevronLeft className="w-5 h-5 opacity-50" />
-            </button>
-          ))}
-        </div>
-      </div>
-      {showAbout && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-sm z-50 flex items-center justify-center animate-fade-in" onClick={() => setShowAbout(false)}>
-          <Card className="w-80 shadow-xl border-0 animate-scale-in" onClick={e => e.stopPropagation()}>
-            <CardContent className="p-6 text-center space-y-4">
-              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
-                <Info className="w-8 h-8 text-primary" />
-              </div>
-              <h2 className="text-xl font-bold text-foreground">دفتر الحسابات الآمن</h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">تطبيق متطور لإدارة حسابات العملاء والديون بشكل آمن ومشفر بالكامل على جهازك.</p>
-              <div className="pt-4 border-t border-border space-y-2">
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">المطور</p>
-                <p className="text-sm font-bold text-foreground" dir="ltr">+249 11 486 6251</p>
-              </div>
-              <button onClick={() => setShowAbout(false)} className="w-full bg-primary text-primary-foreground py-3 rounded-xl font-bold mt-2 shadow-lg active:scale-95 transition-transform">إغلاق</button>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default MainMenu;

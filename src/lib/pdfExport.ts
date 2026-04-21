@@ -1,4 +1,4 @@
-import type { Client, Transaction } from './db';
+import type { Client, Transaction } from '@/lib/db';
 
 // تخزين مؤقت للمكتبات المستوردة لتحسين الأداء
 let html2pdfModule: any = null;

@@ -142,7 +142,69 @@ const LedgerPage = () => {
     toast.success('تم حذف المعاملة');
   };
 
-  // Helper to render stars based on rating
+  const saveEditTx = async () => {
+    if (!editingTx?.id) return;
+    await updateTransaction(editingTx.id, {
+      amount: parseFloat(editAmount) || 0,
+      details: editDetails.trim(),
+      date: editDate,
+      type: editType,
+    });
+    setEditingTx(null);
+    toast.success('تم تعديل المعاملة ✓');
+    loadData();
+  };
+
+  // ---------------- الدوال التي كانت مفقودة وتسببت بالشاشة البيضاء ---------------- //
+  const handleSharePDF = async () => {
+    if (!client) return;
+    toast.info('جاري تجهيز ملف PDF...');
+    try {
+      const blob = await exportLedgerPDF(client, transactions, totalDebit, totalCredit, netBalance);
+      const fileName = `كشف_حساب_${client.name}.pdf`;
+      const file = new File([blob], fileName, { type: 'application/pdf' });
+      await shareFileNative(file, 'كشف حساب PDF', `كشف حساب العميل ${client.name}`);
+    } catch (error) { toast.error('حدث خطأ أثناء تصدير PDF'); }
+    setShowShareModal(false);
+  };
+
+  const handleShareExcel = async () => {
+    if (!client) return;
+    toast.info('جاري تجهيز ملف الإكسل...');
+    try {
+      const file = await generateExcelFile(client, transactions);
+      await shareFileNative(file, 'كشف حساب Excel', `كشف حساب العميل ${client.name}`);
+    } catch (error) { toast.error('حدث خطأ أثناء تصدير Excel'); }
+    setShowShareModal(false);
+  };
+
+  const handleShareText = async () => {
+    if (!client) return;
+    const text = generateShareText(client, transactions, totalDebit, totalCredit, netBalance);
+    await shareTextNative(`كشف حساب ${client.name}`, text);
+    setShowShareModal(false);
+  };
+
+  const handleShareImage = async () => {
+    toast.info('جاري تجهيز الصورة، الرجاء الانتظار...');
+    try {
+      const module = await import('html2canvas');
+      const html2canvas = (module as any).default || (module as any);
+      const element = document.getElementById('ledger-content-to-capture');
+      if (!element) return;
+      const canvas = await html2canvas(element, { useCORS: true, scale: 2, backgroundColor: '#ffffff', logging: false });
+      canvas.toBlob(async (blob: Blob | null) => {
+        if (blob) {
+          const fileName = `كشف_حساب_${client?.name || 'عميل'}.png`;
+          const file = new File([blob], fileName, { type: 'image/png' });
+          await shareFileNative(file, 'صورة كشف الحساب', `كشف حساب العميل ${client?.name}`);
+        }
+      }, 'image/png');
+    } catch (error) { toast.error('فشل إنشاء الصورة'); }
+    setShowShareModal(false);
+  };
+  // ----------------------------------------------------------------------------- //
+
   const renderRatingStars = () => {
     if (!client?.rating) return null;
     return (
@@ -174,7 +236,6 @@ const LedgerPage = () => {
         showBack
         actions={
           <div className="flex items-center gap-2">
-            {/* عرض النجوم في الشريط العلوي هنا */}
             {renderRatingStars()}
             <button onClick={() => setShowMenu(!showMenu)} className="p-1">
               <MoreVertical className="w-7 h-7 text-white drop-shadow-md" />
@@ -206,7 +267,7 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* Selection Mode Header Overlay */}
+      {/* Selection Mode Header */}
       {isSelectionMode && (
         <div className="fixed top-0 left-0 right-0 h-14 bg-header text-header z-[60] flex items-center justify-between px-4 shadow-lg animate-fade-in" dir="rtl">
           <div className="flex items-center gap-4">
@@ -217,7 +278,7 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* Budget Box - Fixed Consistency with English Numbers */}
+      {/* Budget Box */}
       {budgetLimit > 0 && (
         <div className="mx-3 mt-3 rounded-2xl overflow-hidden shadow-xl border border-white/10 animate-fade-in">
           <div className="bg-gradient-to-l from-[#5D4037] to-[#8D6E63] text-white p-5">
@@ -247,7 +308,7 @@ const LedgerPage = () => {
       )}
 
       {/* Transactions Table */}
-      <div className="p-3 flex-1 mt-2">
+      <div id="ledger-content-to-capture" className="p-3 flex-1 mt-2">
         <Card className="shadow-lg border-0 overflow-hidden rounded-2xl">
           <CardContent className="p-0">
             {showSearch && (
@@ -264,7 +325,7 @@ const LedgerPage = () => {
               <div className="w-[75px] text-left">الرصيد</div>
             </div>
             <div className="divide-y divide-border/30 select-none" dir="rtl">
-              {filteredTransactions.map((tx, idx) => (
+              {transactions.filter(tx => (tx.details || '').includes(searchQuery) || (tx.amount || 0).toString().includes(searchQuery)).map((tx, idx) => (
                 <div
                   key={tx.id || idx}
                   onTouchStart={() => handleTouchStart(tx)}
@@ -294,15 +355,12 @@ const LedgerPage = () => {
         </Card>
       </div>
 
-      {/* --- REFRESHED BOTTOM BAR --- */}
+      {/* Bottom Bar */}
       <footer className="fixed bottom-0 left-0 right-0 bg-[#5D4037] text-white p-3 z-40 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.15)]">
         <div className="flex items-center justify-between px-2 w-full">
-          {/* Share - Far Left */}
           <button onClick={() => setShowShareModal(true)} className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center active:scale-90 transition-transform">
             <Share2 className="w-6 h-6" />
           </button>
-
-          {/* Balance - Center */}
           <div className="flex flex-col items-center bg-black/20 py-2 px-6 rounded-2xl">
             <span className="text-[10px] font-bold opacity-70 mb-0.5">الرصيد النهائي</span>
             <div className="flex items-center gap-1" dir="rtl">
@@ -312,15 +370,13 @@ const LedgerPage = () => {
               </span>
             </div>
           </div>
-
-          {/* Add - Far Right */}
           <button onClick={() => navigate(`/add-transaction?clientId=${client?.id}`)} className="w-14 h-14 bg-white text-[#5D4037] rounded-2xl flex items-center justify-center shadow-lg active:scale-90 transition-transform">
             <Plus className="w-8 h-8 font-black" />
           </button>
         </div>
       </footer>
 
-      {/* Modal: Rating Client */}
+      {/* Rating Modal */}
       {showRatingModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowRatingModal(false)}>
           <Card className="shadow-2xl w-full max-w-xs border-0 animate-scale-in rounded-3xl overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
@@ -352,6 +408,26 @@ const LedgerPage = () => {
         </div>
       )}
 
+      {/* Edit Tx Modal */}
+      {editingTx && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] z-[80] flex items-center justify-center p-4 animate-fade-in" onClick={() => setEditingTx(null)}>
+          <Card className="w-full max-w-sm p-5 space-y-4 rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()} dir="rtl">
+            <h3 className="font-bold text-lg text-center flex items-center justify-center gap-2 mb-2"><Pencil className="w-5 h-5"/> تعديل المعاملة</h3>
+            <input type="number" className="w-full border p-3 rounded-xl outline-none" value={editAmount} onChange={e => setEditAmount(e.target.value)} placeholder="المبلغ" />
+            <input type="text" className="w-full border p-3 rounded-xl outline-none" value={editDetails} onChange={e => setEditDetails(e.target.value)} placeholder="التفاصيل" />
+            <input type="date" className="w-full border p-3 rounded-xl outline-none text-right" lang="en" dir="ltr" value={editDate} onChange={e => setEditDate(e.target.value)} />
+            <div className="flex gap-4 justify-center py-2">
+              <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="edittype" checked={editType === 'debit'} onChange={() => setEditType('debit')} className="w-5 h-5" /><span className="font-bold">عليه</span></label>
+              <label className="flex items-center gap-2 cursor-pointer"><input type="radio" name="edittype" checked={editType === 'credit'} onChange={() => setEditType('credit')} className="w-5 h-5" /><span className="font-bold">له</span></label>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={saveEditTx} className="flex-1 bg-[#5D4037] text-white py-3 rounded-xl font-bold">حفظ</button>
+              <button onClick={() => setEditingTx(null)} className="flex-1 bg-muted py-3 rounded-xl font-bold">إلغاء</button>
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* Context Menu for Single Transaction */}
       {contextMenuTx && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[70] flex items-center justify-center p-6 animate-fade-in" onClick={() => setContextMenuTx(null)}>
@@ -361,7 +437,7 @@ const LedgerPage = () => {
               <p className="text-[11px] opacity-80 truncate mt-1">{contextMenuTx.details}</p>
             </div>
             <div className="p-3 grid grid-cols-1 gap-2">
-              <button onClick={() => { setEditingTx(contextMenuTx); setContextMenuTx(null); }} className="flex items-center gap-3 p-3 hover:bg-muted rounded-xl font-bold transition-colors">
+              <button onClick={() => { setEditAmount((contextMenuTx.amount||0).toString()); setEditDetails(contextMenuTx.details||''); setEditDate(contextMenuTx.date||''); setEditType(contextMenuTx.type); setEditingTx(contextMenuTx); setContextMenuTx(null); }} className="flex items-center gap-3 p-3 hover:bg-muted rounded-xl font-bold transition-colors">
                 <Pencil className="w-5 h-5 text-blue-500" /> تعديل المعاملة
               </button>
               <button onClick={() => { setShowColorPicker(true); setContextMenuTx(null); }} className="flex items-center gap-3 p-3 hover:bg-muted rounded-xl font-bold transition-colors">
@@ -376,7 +452,7 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* Modern Notes Sheet Overlay */}
+      {/* Notes Sheet */}
       {showNotes && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[80] flex items-end justify-center animate-fade-in" onClick={() => setShowNotes(false)}>
           <div className="bg-card w-full max-h-[85vh] rounded-t-3xl p-6 overflow-y-auto animate-slide-up shadow-2xl border-t border-border" onClick={e => e.stopPropagation()} dir="rtl">
@@ -384,24 +460,10 @@ const LedgerPage = () => {
                 <h3 className="text-xl font-black">ملاحظات {client?.name}</h3>
                 <button onClick={() => setShowNotes(false)} className="bg-muted p-2 rounded-full"><X className="w-5 h-5"/></button>
              </div>
-             
-             {/* Add Note Input */}
              <div className="relative mb-6">
-                <textarea 
-                  id="note-input"
-                  placeholder="اكتب ملاحظة جديدة هنا..." 
-                  className="w-full bg-muted border-none rounded-2xl p-4 text-sm font-bold min-h-[100px] outline-none focus:ring-2 focus:ring-[#5D4037]/30"
-                />
-                <button 
-                  onClick={() => {
-                    const el = document.getElementById('note-input') as HTMLTextAreaElement;
-                    handleAddNote(el.value);
-                    el.value = '';
-                  }}
-                  className="absolute bottom-3 left-3 bg-[#5D4037] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md"
-                >حفظ الملاحظة</button>
+                <textarea id="note-input" placeholder="اكتب ملاحظة جديدة هنا..." className="w-full bg-muted border-none rounded-2xl p-4 text-sm font-bold min-h-[100px] outline-none focus:ring-2 focus:ring-[#5D4037]/30" />
+                <button onClick={() => { const el = document.getElementById('note-input') as HTMLTextAreaElement; handleAddNote(el.value); el.value = ''; }} className="absolute bottom-3 left-3 bg-[#5D4037] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md">حفظ الملاحظة</button>
              </div>
-
              <div className="space-y-3">
                 {client?.notes?.length === 0 ? (
                   <div className="text-center py-10 text-muted-foreground opacity-50">لا توجد ملاحظات حالياً</div>
@@ -421,7 +483,7 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* Modal: سقف الحساب */}
+      {/* Limit Modal */}
       {showLimitModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowLimitModal(false)}>
           <Card className="shadow-2xl w-full max-w-xs border-0 animate-scale-in rounded-3xl overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
@@ -431,16 +493,7 @@ const LedgerPage = () => {
             <CardContent className="p-5 space-y-4 bg-card">
               <div>
                 <label className="text-sm font-bold text-muted-foreground mb-2 block">السقف المالي الجديد</label>
-                {/* إجبار الأرقام على أن تكون إنجليزية هنا */}
-                <input 
-                  className="w-full border border-input rounded-xl px-4 py-3 text-left bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-[#5D4037] font-sans text-lg tracking-wider font-bold" 
-                  type="number" 
-                  lang="en" 
-                  dir="ltr" 
-                  value={newLimit} 
-                  onChange={e => setNewLimit(e.target.value)} 
-                  placeholder="0" 
-                />
+                <input className="w-full border border-input rounded-xl px-4 py-3 text-left bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-[#5D4037] font-sans text-lg tracking-wider font-bold" type="number" lang="en" dir="ltr" value={newLimit} onChange={e => setNewLimit(e.target.value)} placeholder="0" />
               </div>
               <div className="flex gap-2 pt-2">
                 <button onClick={handleSaveLimit} className="flex-1 bg-[#5D4037] text-white py-3 rounded-xl font-bold active:scale-95 transition-transform">حفظ السقف</button>
@@ -471,8 +524,128 @@ const LedgerPage = () => {
            </Card>
         </div>
       )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-foreground/50 backdrop-blur-sm z-[100] flex items-end justify-center animate-fade-in" onClick={() => setShowShareModal(false)}>
+          <div className="bg-card w-full rounded-t-3xl p-6 space-y-5 animate-slide-up shadow-2xl border-t border-border" onClick={e => e.stopPropagation()} dir="rtl">
+            <div className="w-12 h-1.5 bg-muted mx-auto rounded-full mb-2" />
+            <div className="text-center">
+              <h3 className="text-xl font-extrabold text-foreground">مشاركة كشف الحساب</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <button onClick={handleSharePDF} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><FileDown className="w-6 h-6 text-primary" /></div>
+                <span className="font-bold text-sm">ملف PDF</span>
+              </button>
+              <button onClick={handleShareImage} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><ImageIcon className="w-6 h-6 text-primary" /></div>
+                <span className="font-bold text-sm">صورة كشف</span>
+              </button>
+              <button onClick={handleShareExcel} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><FileSpreadsheet className="w-6 h-6 text-primary" /></div>
+                <span className="font-bold text-sm">ملف إكسل</span>
+              </button>
+              <button onClick={handleShareText} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><Type className="w-6 h-6 text-primary" /></div>
+                <span className="font-bold text-sm">نص فقط</span>
+              </button>
+            </div>
+            <button onClick={() => setShowShareModal(false)} className="w-full mt-2 p-4 rounded-xl bg-muted text-foreground font-bold hover:bg-muted/80 transition-colors active:scale-95">إلغاء</button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
 
 export default LedgerPage;
+2. مراجعة القائمة الرئيسية (MainMenu.tsx) لتفادي أي أخطاء
+للتأكد تماماً من عدم وجود أي خطأ، قمت بضبط واردات (Imports) الملف، استخدم هذا الكود المضمون:
+
+TypeScript
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import AppHeader from '@/components/AppHeader';
+import { Card, CardContent } from '@/components/ui/card';
+import { toast } from 'sonner';
+import {
+  Plus, FileText, Settings, Share2, Info, LogOut, UserPlus, ChevronLeft
+} from 'lucide-react';
+
+const MainMenu = () => {
+  const navigate = useNavigate();
+  const [showAbout, setShowAbout] = useState(false);
+
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({ 
+        title: 'دفتر الحسابات الآمن', 
+        text: 'تطبيق دفتر حسابات آمن ومشفر بالكامل لإدارة ديونك وحساباتك بسهولة', 
+        url: window.location.origin 
+      });
+    } else {
+      navigator.clipboard.writeText(window.location.origin);
+      toast.success('تم نسخ رابط التطبيق ✓');
+    }
+  };
+
+  const handleExit = () => {
+    navigate('/clients');
+  };
+
+  const menuItems = [
+    { icon: UserPlus, label: 'إضافة عميل', color: 'bg-blue-500/10 text-blue-600', action: () => navigate('/clients') },
+    { icon: Plus, label: 'إضافة مبلغ', color: 'bg-green-500/10 text-green-600', action: () => navigate('/add-transaction') },
+    { icon: FileText, label: 'التقارير', color: 'bg-purple-500/10 text-purple-600', action: () => navigate('/reports') },
+    { icon: Settings, label: 'الإعدادات', color: 'bg-gray-500/10 text-gray-600', action: () => navigate('/settings') },
+    { icon: Share2, label: 'مشاركة التطبيق', color: 'bg-cyan-500/10 text-cyan-600', action: handleShare },
+    { icon: Info, label: 'حول البرنامج', color: 'bg-amber-500/10 text-amber-600', action: () => setShowAbout(true) },
+    { icon: LogOut, label: 'خروج', color: 'bg-red-500/10 text-red-600', action: handleExit },
+  ];
+
+  return (
+    <div className="min-h-screen bg-background pb-6 flex flex-col" dir="rtl">
+      <AppHeader title="القائمة الرئيسية" showBack />
+      <div className="flex-1 p-4 overflow-y-auto">
+        <div className="flex flex-col gap-3">
+          {menuItems.map((item, i) => (
+            <button
+              key={i}
+              onClick={item.action}
+              className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-transparent hover:border-primary/20 active:scale-95 transition-all shadow-sm animate-fade-in ${item.color}`}
+              style={{ animationDelay: `${i * 50}ms` }}
+            >
+              <div className="p-3 rounded-xl bg-white/60 shadow-inner flex-shrink-0">
+                <item.icon className="w-6 h-6" />
+              </div>
+              <span className="text-base font-bold text-foreground text-right flex-1">{item.label}</span>
+              <ChevronLeft className="w-5 h-5 opacity-50" />
+            </button>
+          ))}
+        </div>
+      </div>
+      {showAbout && (
+        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-sm z-50 flex items-center justify-center animate-fade-in" onClick={() => setShowAbout(false)}>
+          <Card className="w-80 shadow-xl border-0 animate-scale-in" onClick={e => e.stopPropagation()}>
+            <CardContent className="p-6 text-center space-y-4">
+              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
+                <Info className="w-8 h-8 text-primary" />
+              </div>
+              <h2 className="text-xl font-bold text-foreground">دفتر الحسابات الآمن</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">تطبيق متطور لإدارة حسابات العملاء والديون بشكل آمن ومشفر بالكامل على جهازك.</p>
+              <div className="pt-4 border-t border-border space-y-2">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">المطور</p>
+                <p className="text-sm font-bold text-foreground" dir="ltr">+249 11 486 6251</p>
+              </div>
+              <button onClick={() => setShowAbout(false)} className="w-full bg-primary text-primary-foreground py-3 rounded-xl font-bold mt-2 shadow-lg active:scale-95 transition-transform">إغلاق</button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default MainMenu;

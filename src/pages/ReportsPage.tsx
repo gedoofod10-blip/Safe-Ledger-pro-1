@@ -1,384 +1,414 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { getAllClients, getAllTransactions, type Client, type Transaction } from '@/lib/db';
-import { Search, FileText, ArrowLeft, TrendingUp, AlertCircle, Calendar } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { ArrowRight, Share2, FileDown, Type, Image as ImageIcon, FileSpreadsheet, ListFilter, Users, ArrowDown, ArrowUp, ChevronRight, ChevronLeft } from 'lucide-react';
 import { formatNumber } from '@/lib/utils';
-import { differenceInDays, parseISO } from 'date-fns';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { toast } from 'sonner';
+import { shareFileNative, shareTextNative } from '@/lib/sharing';
 
-interface ReportRow {
-  id?: number;
-  name: string;
+// --- Types ---
+interface TransactionRow extends Transaction {
+  clientName: string;
+  category: string;
+}
+
+interface BalanceRow {
+  clientId: number;
+  clientName: string;
+  category: string;
   balance: number;
-  days: number;
-  rating?: 'excellent' | 'average' | 'poor';
-  budgetLimit?: number;
-  isOverBudget?: boolean;
-  color?: string;
-  category?: string;
-  lastTransactionDate?: string;
 }
 
 const ReportsPage = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const reportRef = useRef<HTMLDivElement>(null);
-  const [reportData, setReportData] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [reportType] = useState(searchParams.get('type') || 'total');
+  
+  // Tabs: 'transactions' = سجل المعاملات | 'balances' = أرصدة التصنيفات
+  const [activeTab, setActiveTab] = useState<'transactions' | 'balances'>('transactions');
+  
+  // Data
+  const [transactionsData, setTransactionsData] = useState<TransactionRow[]>([]);
+  const [balancesData, setBalancesData] = useState<BalanceRow[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('الكل');
+
+  // Swipe logic states
+  const touchStartX = useRef<number | null>(null);
+
+  // Share Modal
+  const [showShareModal, setShowShareModal] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
+      setLoading(true);
       try {
-        const allClients = await getAllClients();
-        const allTx = await getAllTransactions();
+        const clients = await getAllClients();
+        const txns = await getAllTransactions();
 
-        const processed = allClients.map(client => {
-          const clientTxns = allTx.filter(tx => tx.clientId === client.id);
+        // 1. Prepare Transactions Data (Sorted by Date Descending)
+        const txData: TransactionRow[] = txns.map(tx => {
+          const client = clients.find(c => c.id === tx.clientId);
+          return {
+            ...tx,
+            clientName: client?.name || 'غير معروف',
+            category: client?.category || 'عام'
+          };
+        }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        // 2. Prepare Balances Data (Grouped by Client)
+        const balData: BalanceRow[] = clients.map(client => {
+          const clientTxns = txns.filter(tx => tx.clientId === client.id);
           let balance = 0;
-          let lastDate = client.createdAt;
-
           clientTxns.forEach(tx => {
             if (tx.type === 'debit') balance += tx.amount;
             else balance -= tx.amount;
-            lastDate = tx.date;
           });
-
-          const days = differenceInDays(new Date(), parseISO(lastDate));
-          const budgetLimit = client.budgetLimit || 0;
-          const isOverBudget = budgetLimit > 0 && balance > budgetLimit;
-
           return {
-            id: client.id,
-            name: client.name,
-            balance,
-            days: Math.max(0, days),
-            rating: client.rating,
-            budgetLimit,
-            isOverBudget,
-            color: client.notes?.[0] || undefined,
+            clientId: client.id!,
+            clientName: client.name,
             category: client.category || 'عام',
-            lastTransactionDate: lastDate
+            balance
           };
-        }).filter(row => row.balance !== 0).sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+        }).filter(row => row.balance !== 0) // إخفاء الأرصدة المصفّرة
+          .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
 
-        setReportData(processed);
-        setLoading(false);
+        // 3. Extract Unique Categories
+        const cats = Array.from(new Set(clients.map(c => c.category || 'عام')));
+
+        setTransactionsData(txData);
+        setBalancesData(balData);
+        setCategories(cats);
       } catch (error) {
-        console.error('Error fetching report data:', error);
-        toast.error('فشل تحميل التقرير');
+        toast.error('حدث خطأ أثناء تحميل البيانات');
+      } finally {
         setLoading(false);
       }
     }
-
     fetchData();
   }, []);
 
-  const getFilteredData = () => {
-    let filtered = searchQuery
-      ? reportData.filter(row => row.name.includes(searchQuery))
-      : reportData;
+  const fullCategoriesList = ['الكل', ...categories];
+  
+  const filteredBalances = selectedCategory === 'الكل' 
+    ? balancesData 
+    : balancesData.filter(b => b.category === selectedCategory);
 
-    switch (reportType) {
-      case 'details':
-        // تقرير مفصل: جميع العملاء مع تفاصيل كاملة
-        return filtered;
-      case 'monthly':
-        // تقرير شهري: العملاء الذين تعاملوا في آخر 30 يوم
-        return filtered.filter(row => row.days <= 30);
-      case 'categories':
-        // تقرير حسب التصنيفات: مجموعة حسب التصنيف
-        return filtered;
-      case 'total':
-      default:
-        // تقرير شامل: جميع العملاء
-        return filtered;
-    }
+  // --- Swipe Logic Handlers ---
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
   };
 
-  const filteredData = getFilteredData();
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = touchStartX.current - touchEndX;
+    
+    const currentIndex = fullCategoriesList.indexOf(selectedCategory);
 
-  const totalBalance = filteredData.reduce((sum, row) => sum + row.balance, 0);
-  const totalClients = filteredData.length;
-  const overBudgetCount = filteredData.filter(row => row.isOverBudget).length;
-  const averageDays = totalClients > 0 ? Math.round(filteredData.reduce((sum, row) => sum + row.days, 0) / totalClients) : 0;
-
-  const getRatingColor = (rating?: string) => {
-    switch (rating) {
-      case 'excellent': return '#10b981';
-      case 'average': return '#f59e0b';
-      case 'poor': return '#ef4444';
-      default: return '#6b7280';
+    // RTL Swipe Logic:
+    // Swiping Right (diff < -50) goes to Next category
+    // Swiping Left (diff > 50) goes to Previous category
+    if (diff < -50 && currentIndex < fullCategoriesList.length - 1) {
+      setSelectedCategory(fullCategoriesList[currentIndex + 1]);
+    } else if (diff > 50 && currentIndex > 0) {
+      setSelectedCategory(fullCategoriesList[currentIndex - 1]);
     }
+    
+    touchStartX.current = null;
   };
 
-  const getReportTitle = () => {
-    switch (reportType) {
-      case 'details': return 'تقرير مفصل';
-      case 'monthly': return 'تقرير شهري';
-      case 'categories': return 'تقرير التصنيفات';
-      case 'total':
-      default: return 'تقرير شامل';
-    }
+  const nextCategory = () => {
+    const currentIndex = fullCategoriesList.indexOf(selectedCategory);
+    if (currentIndex < fullCategoriesList.length - 1) setSelectedCategory(fullCategoriesList[currentIndex + 1]);
   };
 
-  const getReportDescription = () => {
-    switch (reportType) {
-      case 'details': return 'تفاصيل كاملة لجميع العملاء والأرصدة';
-      case 'monthly': return 'العملاء الذين تعاملوا في آخر 30 يوم';
-      case 'categories': return 'تقسيم العملاء حسب التصنيفات';
-      case 'total':
-      default: return 'جميع العملاء والأرصدة';
-    }
+  const prevCategory = () => {
+    const currentIndex = fullCategoriesList.indexOf(selectedCategory);
+    if (currentIndex > 0) setSelectedCategory(fullCategoriesList[currentIndex - 1]);
   };
 
-  const handleExportPDF = async () => {
+
+  // --- Sharing & Export Logic ---
+  const handleSharePDF = async () => {
     if (!reportRef.current) return;
-    const loadingToast = toast.loading('جاري تجهيز ملف PDF...');
+    const loadingToast = toast.loading('جاري تجهيز التقرير...');
     try {
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff'
-      });
+      const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`تقرير_${getReportTitle()}_${new Date().toISOString().split('T')[0]}.pdf`);
+      
+      const blob = pdf.output('blob');
+      const file = new File([blob], `تقرير_${activeTab === 'transactions' ? 'المعاملات' : 'الارصدة'}.pdf`, { type: 'application/pdf' });
+      
       toast.dismiss(loadingToast);
-      toast.success('✓ تم تصدير التقرير بنجاح');
+      setShowShareModal(false);
+      await shareFileNative(file, 'تقرير PDF', 'إليك التقرير المطلوب');
     } catch (error) {
       toast.dismiss(loadingToast);
       toast.error('فشل تصدير التقرير');
     }
   };
 
-  // تجميع البيانات حسب التصنيف
-  const groupedByCategory = reportType === 'categories' ? 
-    filteredData.reduce((acc, row) => {
-      const cat = row.category || 'عام';
-      if (!acc[cat]) acc[cat] = [];
-      acc[cat].push(row);
-      return acc;
-    }, {} as Record<string, ReportRow[]>) : null;
+  const handleShareImage = async () => {
+    if (!reportRef.current) return;
+    const loadingToast = toast.loading('جاري تجهيز التقرير...');
+    try {
+      const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      canvas.toBlob(async (blob) => {
+        if (blob) {
+          const file = new File([blob], `تقرير_${activeTab === 'transactions' ? 'المعاملات' : 'الارصدة'}.png`, { type: 'image/png' });
+          toast.dismiss(loadingToast);
+          setShowShareModal(false);
+          await shareFileNative(file, 'صورة تقرير', 'إليك التقرير المطلوب');
+        }
+      }, 'image/png');
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      toast.error('فشل إنشاء الصورة');
+    }
+  };
+
+  const handleShareCSV = async () => {
+    const loadingToast = toast.loading('جاري تجهيز ملف الإكسل...');
+    try {
+      let csvContent = "\uFEFF"; // BOM for Arabic support
+      
+      if (activeTab === 'transactions') {
+        csvContent += "التاريخ,اسم العميل,المبلغ,النوع,التفاصيل\n";
+        transactionsData.forEach(tx => {
+          const typeStr = tx.type === 'debit' ? 'عليه' : 'له';
+          csvContent += `${tx.date},"${tx.clientName}",${tx.amount},${typeStr},"${tx.details}"\n`;
+        });
+      } else {
+        csvContent += "اسم العميل,الرصيد,الحالة,التصنيف\n";
+        filteredBalances.forEach(b => {
+          const typeStr = b.balance > 0 ? 'عليه' : 'له';
+          csvContent += `"${b.clientName}",${Math.abs(b.balance)},${typeStr},"${b.category}"\n`;
+        });
+      }
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const file = new File([blob], `تقرير_${activeTab === 'transactions' ? 'المعاملات' : 'الارصدة'}.csv`, { type: 'text/csv' });
+      
+      toast.dismiss(loadingToast);
+      setShowShareModal(false);
+      await shareFileNative(file, 'ملف إكسل (CSV)', 'إليك التقرير كملف إكسل');
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      toast.error('فشل تصدير الإكسل');
+    }
+  };
+
+  const handleShareText = async () => {
+    try {
+      let text = `📄 تقرير ${activeTab === 'transactions' ? 'سجل المعاملات' : 'أرصدة التصنيفات'}\n`;
+      text += `📅 التاريخ: ${new Date().toISOString().split('T')[0]}\n\n`;
+
+      if (activeTab === 'transactions') {
+        transactionsData.forEach(tx => {
+          text += `▪ ${tx.date} | ${tx.clientName}\n`;
+          text += `المبلغ: ${tx.amount} (${tx.type === 'debit' ? 'عليه' : 'له'}) - ${tx.details}\n`;
+          text += `-----------------\n`;
+        });
+      } else {
+        text += `التصنيف: ${selectedCategory}\n\n`;
+        filteredBalances.forEach(b => {
+          text += `▪ ${b.clientName}: ${formatNumber(Math.abs(b.balance))} (${b.balance > 0 ? 'عليه' : 'له'})\n`;
+        });
+      }
+
+      setShowShareModal(false);
+      await shareTextNative('مشاركة التقرير', text);
+    } catch (error) {
+      toast.error('فشل مشاركة النص');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
-      {/* الشريط العلوي */}
-      <div className="bg-gradient-to-l from-header to-header text-header flex items-center justify-between p-4 shadow-lg sticky top-0 z-40">
+      {/* --- HEADER --- */}
+      <div className="bg-header text-header flex items-center justify-between p-4 shadow-md sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
-            <ArrowLeft className="w-6 h-6" />
+          <button onClick={() => navigate(-1)} className="p-1 hover:bg-white/20 rounded-full transition-colors">
+            <ArrowRight className="w-6 h-6" />
           </button>
-          <div>
-            <h1 className="text-lg font-bold">{getReportTitle()}</h1>
-            <p className="text-xs opacity-80">{getReportDescription()}</p>
-          </div>
+          <h1 className="text-xl font-bold">التقارير</h1>
         </div>
-        <div className="flex items-center gap-3">
-          <button onClick={handleExportPDF} className="p-2 hover:bg-white/10 rounded-lg transition-colors" title="تصدير PDF">
-            <FileText className="w-5 h-5" />
-          </button>
-        </div>
+        {/* Export Button */}
+        <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors">
+          <Share2 className="w-5 h-5" />
+          <span className="text-sm font-bold">تصدير</span>
+        </button>
       </div>
 
-      {/* شريط البحث */}
+      {/* --- TABS --- */}
       <div className="bg-card border-b border-border p-3">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="ابحث عن عميل..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-background border border-input rounded-lg px-4 py-2.5 text-right text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-              ✕
-            </button>
-          )}
+        <div className="flex bg-muted rounded-xl p-1 shadow-inner">
+          <button
+            onClick={() => setActiveTab('transactions')}
+            className={`flex-1 py-2.5 text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all ${activeTab === 'transactions' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-background/50'}`}
+          >
+            <ListFilter className="w-4 h-4" /> سجل المعاملات
+          </button>
+          <button
+            onClick={() => setActiveTab('balances')}
+            className={`flex-1 py-2.5 text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all ${activeTab === 'balances' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-background/50'}`}
+          >
+            <Users className="w-4 h-4" /> أرصدة التصنيفات
+          </button>
         </div>
       </div>
 
-      {/* الإحصائيات العامة */}
-      <div className="grid grid-cols-2 gap-3 p-3 bg-background">
-        <div className="bg-card border border-border rounded-lg p-4">
-          <div className="text-xs text-muted-foreground mb-1">إجمالي العملاء</div>
-          <div className="text-2xl font-bold text-foreground">{formatNumber(totalClients)}</div>
+      {/* --- REPORT CONTENT (To be captured) --- */}
+      <div ref={reportRef} className="flex-1 bg-background p-3 pb-24">
+        
+        {/* Print Header */}
+        <div className="hidden print-header text-center mb-4 pb-2 border-b-2 border-primary">
+          <h2 className="text-xl font-black text-foreground">
+            {activeTab === 'transactions' ? 'سجل المعاملات الشامل' : `تقرير أرصدة التصنيفات (${selectedCategory})`}
+          </h2>
+          <p className="text-sm text-muted-foreground">تاريخ الإصدار: {new Date().toISOString().split('T')[0]}</p>
         </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-          <div className="text-xs text-muted-foreground mb-1">الرصيد الإجمالي</div>
-          <div className={`text-2xl font-bold ${totalBalance >= 0 ? 'text-red-500' : 'text-green-500'}`}>
-            {formatNumber(Math.abs(totalBalance))}
-          </div>
-        </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-          <div className="text-xs text-muted-foreground mb-1">متوسط الأيام</div>
-          <div className="text-2xl font-bold text-foreground">{formatNumber(averageDays)}</div>
-        </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-          <div className="text-xs text-muted-foreground mb-1">تجاوز السقف</div>
-          <div className={`text-2xl font-bold ${overBudgetCount > 0 ? 'text-red-500' : 'text-green-500'}`}>
-            {formatNumber(overBudgetCount)}
-          </div>
-        </div>
-      </div>
 
-      {/* محتوى التقرير */}
-      <div ref={reportRef} className="flex-1 bg-white">
-        {reportType === 'categories' && groupedByCategory ? (
-          // عرض التقارير مجمعة حسب التصنيفات
-          <div>
-            {Object.entries(groupedByCategory).map(([category, items]) => (
-              <div key={category} className="mb-6">
-                {/* رأس التصنيف */}
-                <div className="bg-primary/10 px-4 py-3 border-b-2 border-primary">
-                  <h3 className="font-bold text-lg text-primary">{category}</h3>
-                  <p className="text-sm text-muted-foreground">عدد العملاء: {items.length}</p>
-                </div>
+        <Card className="shadow-lg border-0 overflow-hidden rounded-2xl">
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="p-10 text-center font-bold text-muted-foreground">جاري تحميل التقرير...</div>
+            ) : (
+              <>
+                {/* 1. Transactions View */}
+                {activeTab === 'transactions' && (
+                  <>
+                    <div className="bg-table-header text-table-header grid grid-cols-[80px_1fr_80px_1.5fr] text-center text-[12px] font-extrabold py-3 px-2 border-b border-border/50 sticky top-0 shadow-sm">
+                      <div className="text-right pr-2">التاريخ</div>
+                      <div className="text-right">العميل</div>
+                      <div>المبلغ</div>
+                      <div className="text-right">التفاصيل</div>
+                    </div>
+                    <div className="divide-y divide-border/40">
+                      {transactionsData.length === 0 ? (
+                        <div className="p-8 text-center text-muted-foreground font-bold">لا توجد معاملات مسجلة</div>
+                      ) : (
+                        transactionsData.map((tx, idx) => (
+                          <div key={idx} className={`grid grid-cols-[80px_1fr_80px_1.5fr] py-3 px-2 items-center ${idx % 2 === 0 ? 'bg-white' : 'bg-muted/5'}`}>
+                            <div className="text-right text-[10px] font-bold text-muted-foreground pr-1">{tx.date}</div>
+                            <div className="text-right text-xs font-bold text-foreground truncate pl-2">{tx.clientName}</div>
+                            <div className="flex items-center justify-center gap-0.5 font-black text-xs">
+                              {tx.type === 'debit' ? <ArrowDown className="w-3 h-3 text-debit"/> : <ArrowUp className="w-3 h-3 text-credit"/>}
+                              <span className={tx.type === 'debit' ? 'text-debit' : 'text-credit'} dir="ltr">{formatNumber(tx.amount)}</span>
+                            </div>
+                            <div className="text-right text-[11px] font-bold text-foreground break-words leading-tight">{tx.details}</div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
 
-                {/* رأس الجدول */}
-                <div className="bg-table-header text-table-header grid grid-cols-[0.8fr_2fr_1.2fr_1.2fr_1fr] text-center text-sm font-bold py-3 px-2">
-                  <span>التقييم</span>
-                  <span>اسم العميل</span>
-                  <span>الرصيد</span>
-                  <span>الأيام</span>
-                  <span>الحالة</span>
-                </div>
-
-                {/* البيانات */}
-                {items.map((row, index) => (
-                  <div
-                    key={row.id || index}
-                    className={`grid grid-cols-[0.8fr_2fr_1.2fr_1.2fr_1fr] text-center py-3 px-2 border-b border-gray-200 ${
-                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                    } hover:bg-blue-50 transition-colors`}
+                {/* 2. Balances View (With Swipe Logic) */}
+                {activeTab === 'balances' && (
+                  <div 
+                    onTouchStart={handleTouchStart} 
+                    onTouchEnd={handleTouchEnd}
+                    className="animate-fade-in"
+                    key={selectedCategory} // Forces re-render for animation when category changes
                   >
-                    <div className="flex justify-center items-center">
-                      <div
-                        className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                        style={{ backgroundColor: getRatingColor(row.rating) }}
-                        title={`التقييم: ${row.rating || 'بدون'}`}
+                    {/* Category Swipe Indicator Header */}
+                    <div className="bg-muted/30 flex items-center justify-between p-3 border-b border-border select-none">
+                      <button 
+                        onClick={prevCategory} 
+                        disabled={fullCategoriesList.indexOf(selectedCategory) === 0}
+                        className="p-1 hover:bg-muted rounded-full transition-colors disabled:opacity-30"
                       >
-                        {row.rating === 'excellent' ? '✓' : row.rating === 'average' ? '○' : row.rating === 'poor' ? '✕' : '-'}
+                        <ChevronRight className="w-5 h-5 text-foreground" />
+                      </button>
+                      
+                      <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-0.5">تصنيف التقرير</span>
+                        <span className="text-sm font-extrabold text-primary">{selectedCategory}</span>
                       </div>
+
+                      <button 
+                        onClick={nextCategory} 
+                        disabled={fullCategoriesList.indexOf(selectedCategory) === fullCategoriesList.length - 1}
+                        className="p-1 hover:bg-muted rounded-full transition-colors disabled:opacity-30"
+                      >
+                        <ChevronLeft className="w-5 h-5 text-foreground" />
+                      </button>
                     </div>
-                    <div className="text-right font-semibold text-gray-800 truncate pr-2">{row.name}</div>
-                    <div className={`font-bold ${row.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {formatNumber(row.balance)}
+
+                    <div className="bg-table-header text-table-header flex justify-between text-[13px] font-extrabold py-3 px-5 border-b border-border/50 sticky top-0 shadow-sm">
+                      <div className="text-right">اسم العميل</div>
+                      <div className="text-left">الرصيد النهائي</div>
                     </div>
-                    <div className={`font-semibold ${row.days > 30 ? 'text-red-600' : row.days > 15 ? 'text-yellow-600' : 'text-green-600'}`}>
-                      {formatNumber(row.days)}
-                    </div>
-                    <div className="flex justify-center">
-                      {row.isOverBudget && (
-                        <span className="bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded-full">تجاوز</span>
-                      )}
-                      {!row.isOverBudget && row.budgetLimit && (
-                        <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full">آمن</span>
-                      )}
-                      {!row.budgetLimit && (
-                        <span className="bg-gray-100 text-gray-700 text-xs font-bold px-2 py-1 rounded-full">بدون سقف</span>
+                    
+                    <div className="divide-y divide-border/40">
+                      {filteredBalances.length === 0 ? (
+                        <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-2">
+                           <Users className="w-10 h-10 opacity-20 mb-2" />
+                           <span className="font-bold">لا يوجد أرصدة في تصنيف "{selectedCategory}"</span>
+                           <span className="text-xs">اسحب لليمين أو اليسار للتنقل</span>
+                        </div>
+                      ) : (
+                        filteredBalances.map((b, idx) => (
+                          <div key={idx} className={`flex justify-between py-4 px-5 items-center ${idx % 2 === 0 ? 'bg-white' : 'bg-muted/5'}`}>
+                            <div className="text-right text-sm font-bold text-foreground">{b.clientName}</div>
+                            <div className="text-left flex items-center gap-1.5 font-black text-sm">
+                              {b.balance > 0 ? <ArrowDown className="w-4 h-4 text-debit"/> : <ArrowUp className="w-4 h-4 text-credit"/>}
+                              <span className="text-foreground" dir="ltr">{formatNumber(Math.abs(b.balance))}</span>
+                            </div>
+                          </div>
+                        ))
                       )}
                     </div>
                   </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        ) : (
-          // عرض التقرير العادي
-          <>
-            {/* رأس الجدول */}
-            <div className="bg-table-header text-table-header grid grid-cols-[0.8fr_2fr_1.2fr_1.2fr_1fr] text-center text-sm font-bold py-3 px-2 sticky top-0">
-              <span>التقييم</span>
-              <span>اسم العميل</span>
-              <span>الرصيد</span>
-              <span>الأيام</span>
-              <span>الحالة</span>
-            </div>
-
-            {/* المحتوى */}
-            <div className="overflow-y-auto max-h-[calc(100vh-400px)]">
-              {loading ? (
-                <div className="p-10 text-center text-muted-foreground font-bold">
-                  <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                  جاري التحميل...
-                </div>
-              ) : filteredData.length === 0 ? (
-                <div className="p-10 text-center text-muted-foreground">
-                  <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  لا توجد بيانات للعرض
-                </div>
-              ) : (
-                filteredData.map((row, index) => (
-                  <div
-                    key={row.id || index}
-                    className={`grid grid-cols-[0.8fr_2fr_1.2fr_1.2fr_1fr] text-center py-3 px-2 border-b border-gray-200 ${
-                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                    } hover:bg-blue-50 transition-colors`}
-                  >
-                    <div className="flex justify-center items-center">
-                      <div
-                        className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                        style={{ backgroundColor: getRatingColor(row.rating) }}
-                        title={`التقييم: ${row.rating || 'بدون'}`}
-                      >
-                        {row.rating === 'excellent' ? '✓' : row.rating === 'average' ? '○' : row.rating === 'poor' ? '✕' : '-'}
-                      </div>
-                    </div>
-                    <div className="text-right font-semibold text-gray-800 truncate pr-2">{row.name}</div>
-                    <div className={`font-bold ${row.balance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {formatNumber(row.balance)}
-                    </div>
-                    <div className={`font-semibold ${row.days > 30 ? 'text-red-600' : row.days > 15 ? 'text-yellow-600' : 'text-green-600'}`}>
-                      {formatNumber(row.days)}
-                    </div>
-                    <div className="flex justify-center">
-                      {row.isOverBudget && (
-                        <span className="bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded-full">تجاوز</span>
-                      )}
-                      {!row.isOverBudget && row.budgetLimit && (
-                        <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded-full">آمن</span>
-                      )}
-                      {!row.budgetLimit && (
-                        <span className="bg-gray-100 text-gray-700 text-xs font-bold px-2 py-1 rounded-full">بدون سقف</span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </>
-        )}
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* الشريط السفلي - الملخص */}
-      <div className="bg-gradient-to-r from-header to-header text-header p-4 shadow-lg border-t border-white/10">
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <div className="text-xs opacity-80 mb-1">الإجمالي</div>
-            <div className="text-xl font-bold">
-              {totalBalance >= 0 ? `عليه ${formatNumber(totalBalance)}` : `له ${formatNumber(Math.abs(totalBalance))}`}
+      {/* --- SHARE MODAL --- */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-foreground/50 backdrop-blur-sm z-50 flex items-end justify-center animate-fade-in" onClick={() => setShowShareModal(false)}>
+          <div className="bg-card w-full rounded-t-3xl p-6 space-y-5 animate-slide-up shadow-2xl border-t border-border" onClick={e => e.stopPropagation()}>
+            <div className="w-12 h-1.5 bg-muted mx-auto rounded-full mb-2" />
+            <div className="text-center">
+              <h3 className="text-xl font-extrabold text-foreground">مشاركة التقرير</h3>
+              <p className="text-xs text-muted-foreground mt-1 font-bold">عبر قائمة الهاتف المباشرة</p>
             </div>
-          </div>
-          <div>
-            <div className="text-xs opacity-80 mb-1">عدد العملاء</div>
-            <div className="text-xl font-bold">{formatNumber(totalClients)}</div>
-          </div>
-          <div>
-            <div className="text-xs opacity-80 mb-1">تجاوز السقف</div>
-            <div className={`text-xl font-bold ${overBudgetCount > 0 ? 'text-red-300' : 'text-green-300'}`}>
-              {formatNumber(overBudgetCount)}
+            
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <button onClick={handleSharePDF} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center group-active:scale-90 transition-transform"><FileDown className="w-6 h-6 text-primary" /></div>
+                <span className="font-bold text-sm">ملف PDF</span>
+              </button>
+              <button onClick={handleShareImage} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center group-active:scale-90 transition-transform"><ImageIcon className="w-6 h-6 text-primary" /></div>
+                <span className="font-bold text-sm">صورة تقرير</span>
+              </button>
+              <button onClick={handleShareCSV} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center group-active:scale-90 transition-transform"><FileSpreadsheet className="w-6 h-6 text-primary" /></div>
+                <span className="font-bold text-sm">ملف إكسل</span>
+              </button>
+              <button onClick={handleShareText} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center group-active:scale-90 transition-transform"><Type className="w-6 h-6 text-primary" /></div>
+                <span className="font-bold text-sm">نص فقط</span>
+              </button>
             </div>
+            
+            <button onClick={() => setShowShareModal(false)} className="w-full mt-2 p-4 rounded-xl bg-muted text-foreground font-bold hover:bg-muted/80 transition-colors">إلغاء</button>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

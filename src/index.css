@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+
+@layer base {
+  :root {
+    --background: 40 30% 96%;
+    --foreground: 30 40% 12%;
+
+    --card: 40 25% 99%;
+    --card-foreground: 30 40% 12%;
+
+    --popover: 40 25% 99%;
+    --popover-foreground: 30 40% 12%;
+
+    --primary: 36 60% 32%;
+    --primary-foreground: 40 30% 97%;
+
+    --secondary: 38 45% 42%;
+    --secondary-foreground: 40 30% 97%;
+
+    --muted: 38 20% 90%;
+    --muted-foreground: 30 10% 46%;
+
+    --accent: 34 50% 38%;
+    --accent-foreground: 40 30% 97%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 60% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 38 18% 85%;
+    --input: 38 18% 85%;
+    --ring: 36 60% 32%;
+
+    --radius: 0.75rem;
+
+    --header-bg: 30 50% 22%;
+    --header-foreground: 40 30% 97%;
+    --bottom-bar-bg: 30 50% 22%;
+    --bottom-bar-foreground: 40 30% 97%;
+    --table-header-bg: 34 45% 30%;
+    --table-header-foreground: 40 30% 97%;
+    --menu-icon: 36 55% 38%;
+    --debit-color: 0 72% 51%;
+    --credit-color: 142 60% 40%;
+    --limit-bar-bg: 30 50% 18%;
+    --limit-bar-foreground: 40 30% 97%;
+
+    --sidebar-background: 40 25% 97%;
+    --sidebar-foreground: 30 20% 26%;
+    --sidebar-primary: 30 40% 14%;
+    --sidebar-primary-foreground: 40 25% 97%;
+    --sidebar-accent: 38 20% 93%;
+    --sidebar-accent-foreground: 30 40% 14%;
+    --sidebar-border: 38 15% 88%;
+    --sidebar-ring: 36 60% 32%;
+  }
+
+  .dark {
+    --background: 30 15% 8%;
+    --foreground: 40 40% 88%;
+
+    --card: 30 15% 12%;
+    --card-foreground: 40 40% 88%;
+
+    --popover: 30 15% 12%;
+    --popover-foreground: 40 40% 88%;
+
+    --primary: 38 70% 55%;
+    --primary-foreground: 30 20% 8%;
+
+    --secondary: 35 55% 45%;
+    --secondary-foreground: 30 20% 8%;
+
+    --muted: 30 12% 18%;
+    --muted-foreground: 38 15% 55%;
+
+    --accent: 36 60% 50%;
+    --accent-foreground: 30 20% 8%;
+
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 60% 48%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 30 12% 20%;
+    --input: 30 12% 20%;
+    --ring: 38 70% 55%;
+
+    --header-bg: 30 20% 12%;
+    --header-foreground: 38 60% 80%;
+    --bottom-bar-bg: 30 20% 12%;
+    --bottom-bar-foreground: 38 60% 80%;
+    --table-header-bg: 32 18% 16%;
+    --table-header-foreground: 38 60% 80%;
+    --menu-icon: 38 65% 58%;
+    --debit-color: 0 72% 60%;
+    --credit-color: 142 60% 50%;
+    --limit-bar-bg: 30 20% 10%;
+    --limit-bar-foreground: 38 60% 80%;
+
+    --sidebar-background: 30 15% 10%;
+    --sidebar-foreground: 40 30% 80%;
+    --sidebar-primary: 38 70% 55%;
+    --sidebar-primary-foreground: 30 20% 8%;
+    --sidebar-accent: 30 12% 16%;
+    --sidebar-accent-foreground: 40 30% 80%;
+    --sidebar-border: 30 12% 18%;
+    --sidebar-ring: 38 70% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-cairo antialiased;
+    direction: rtl;
+  }
+}
+
+@layer utilities {
+  .text-debit {
+    color: hsl(var(--debit-color));
+  }
+  .text-credit {
+    color: hsl(var(--credit-color));
+  }
+  .bg-header {
+    background-color: hsl(var(--header-bg));
+  }
+  .text-header {
+    color: hsl(var(--header-foreground));
+  }
+  .bg-bottom-bar {
+    background-color: hsl(var(--bottom-bar-bg));
+  }
+  .text-bottom-bar {
+    color: hsl(var(--bottom-bar-foreground));
+  }
+  .bg-table-header {
+    background-color: hsl(var(--table-header-bg));
+  }
+  .text-table-header {
+    color: hsl(var(--table-header-foreground));
+  }
+  .text-menu-icon {
+    color: hsl(var(--menu-icon));
+  }
+  .bg-limit-bar {
+    background-color: hsl(var(--limit-bar-bg));
+  }
+  .text-limit-bar {
+    color: hsl(var(--limit-bar-foreground));
+  }
+}

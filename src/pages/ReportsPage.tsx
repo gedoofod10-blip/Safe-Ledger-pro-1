@@ -4,8 +4,6 @@ import { getAllClients, getAllTransactions, type Client, type Transaction } from
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowRight, Share2, FileDown, Type, Image as ImageIcon, FileSpreadsheet, ListFilter, Users, ArrowDown, ArrowUp, ChevronRight, ChevronLeft } from 'lucide-react';
 import { formatNumber } from '@/lib/utils';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { toast } from 'sonner';
 import { shareFileNative, shareTextNative } from '@/lib/sharing';
 
@@ -82,7 +80,7 @@ const ReportsPage = () => {
         setTransactionsData(txData);
         setBalancesData(balData);
         setCategories(cats);
-        setViews(['transactions', 'الكل', ...cats]); // Building the unified swipe track
+        setViews(['transactions', 'الكل', ...cats]); 
 
       } catch (error) {
         toast.error('حدث خطأ أثناء تحميل البيانات');
@@ -109,9 +107,6 @@ const ReportsPage = () => {
     const touchEndX = e.changedTouches[0].clientX;
     const diff = touchStartX.current - touchEndX;
     
-    // RTL Swipe:
-    // Swipe Left (diff > 50) -> Next View
-    // Swipe Right (diff < -50) -> Prev View
     if (diff > 50 && activeViewIndex < views.length - 1) {
       setActiveViewIndex(prev => prev + 1);
     } else if (diff < -50 && activeViewIndex > 0) {
@@ -134,6 +129,12 @@ const ReportsPage = () => {
     if (!reportRef.current) return;
     const loadingToast = toast.loading('جاري تجهيز التقرير...');
     try {
+      // تم استخدام الاستدعاء الديناميكي هنا لمنع الشاشة البيضاء
+      const module = await import('html2canvas');
+      const html2canvas = (module as any).default || (module as any);
+      const jsPDFModule = await import('jspdf');
+      const jsPDF = (jsPDFModule as any).default || (jsPDFModule as any);
+
       const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -157,8 +158,12 @@ const ReportsPage = () => {
     if (!reportRef.current) return;
     const loadingToast = toast.loading('جاري تجهيز التقرير...');
     try {
+      // تم استخدام الاستدعاء الديناميكي هنا لمنع الشاشة البيضاء
+      const module = await import('html2canvas');
+      const html2canvas = (module as any).default || (module as any);
+
       const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-      canvas.toBlob(async (blob) => {
+      canvas.toBlob(async (blob: Blob | null) => {
         if (blob) {
           const file = new File([blob], `تقرير_${currentView === 'transactions' ? 'المعاملات' : 'الارصدة'}.png`, { type: 'image/png' });
           toast.dismiss(loadingToast);
@@ -175,7 +180,7 @@ const ReportsPage = () => {
   const handleShareCSV = async () => {
     const loadingToast = toast.loading('جاري تجهيز ملف الإكسل...');
     try {
-      let csvContent = "\uFEFF"; // BOM for Arabic support
+      let csvContent = "\uFEFF"; 
       
       if (currentView === 'transactions') {
         csvContent += "التاريخ,اسم العميل,المبلغ,النوع,التفاصيل\n";
@@ -274,7 +279,6 @@ const ReportsPage = () => {
       >
         <div ref={reportRef} className="animate-slide-up" key={currentView}>
           
-          {/* Print Header (Hidden on screen, visible in PDF) */}
           <div className="hidden print-header text-center mb-4 pb-2 border-b-2 border-primary">
             <h2 className="text-xl font-black text-foreground">
               {currentView === 'transactions' ? 'سجل المعاملات الشامل' : `تقرير أرصدة التصنيفات (${currentView})`}

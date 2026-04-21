@@ -18,7 +18,6 @@ const AddTransactionPage = () => {
   const [clientName, setClientName] = useState('');
   const [amount, setAmount] = useState('');
   const [details, setDetails] = useState('');
-  const [notes, setNotes] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [showClientPicker, setShowClientPicker] = useState(false);
   const [clientSearch, setClientSearch] = useState('');
@@ -45,11 +44,9 @@ const AddTransactionPage = () => {
       amount: parseFloat(amount),
       type,
       details: details.trim(),
-      notes: notes.trim(),
       date,
     });
     
-    // تم كتم الرسالة المزعجة هنا
     navigate(-1);
   };
 
@@ -126,24 +123,16 @@ const AddTransactionPage = () => {
               <div className="w-36">
                 <label className="text-sm font-semibold text-muted-foreground mb-1 block">التاريخ</label>
                 <input
-                  className="w-full border-b-2 border-border bg-transparent px-2 py-2 text-foreground focus:outline-none focus:border-secondary transition-colors"
+                  className="w-full border-b-2 border-border bg-transparent px-2 py-2 text-foreground focus:outline-none focus:border-secondary transition-colors text-right"
                   type="date"
+                  lang="en"
+                  dir="ltr"
                   value={date}
                   onChange={e => setDate(e.target.value)}
                 />
               </div>
             </div>
 
-            <div>
-              <label className="text-sm font-semibold text-muted-foreground mb-1 block">ملاحظات إضافية</label>
-              <textarea
-                className="w-full border-2 border-border rounded-lg bg-transparent px-3 py-2 text-right text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-secondary transition-colors min-h-[80px]"
-                placeholder="أضف ملاحظاتك هنا..."
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-              />
-            </div>
-           {/* تم توحيد الكلمات جوة الحساب لـ (له) و (عليه) */}
             <div className="flex gap-3 pt-4">
               <button
                 onClick={() => handleSubmit('debit')}

@@ -27,14 +27,14 @@ const ReportsPage = () => {
   const reportRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   
-  // Tabs: 'transactions' = سجل المعاملات | 'balances' = أرصدة التصنيفات
-  const [activeTab, setActiveTab] = useState<'transactions' | 'balances'>('transactions');
-  
   // Data
   const [transactionsData, setTransactionsData] = useState<TransactionRow[]>([]);
   const [balancesData, setBalancesData] = useState<BalanceRow[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('الكل');
+  
+  // Unified Swipe Views
+  const [views, setViews] = useState<string[]>(['transactions', 'الكل']);
+  const [activeViewIndex, setActiveViewIndex] = useState(0);
 
   // Swipe logic states
   const touchStartX = useRef<number | null>(null);
@@ -49,7 +49,7 @@ const ReportsPage = () => {
         const clients = await getAllClients();
         const txns = await getAllTransactions();
 
-        // 1. Prepare Transactions Data (Sorted by Date Descending)
+        // 1. Prepare Transactions Data
         const txData: TransactionRow[] = txns.map(tx => {
           const client = clients.find(c => c.id === tx.clientId);
           return {
@@ -59,7 +59,7 @@ const ReportsPage = () => {
           };
         }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-        // 2. Prepare Balances Data (Grouped by Client)
+        // 2. Prepare Balances Data
         const balData: BalanceRow[] = clients.map(client => {
           const clientTxns = txns.filter(tx => tx.clientId === client.id);
           let balance = 0;
@@ -73,15 +73,17 @@ const ReportsPage = () => {
             category: client.category || 'عام',
             balance
           };
-        }).filter(row => row.balance !== 0) // إخفاء الأرصدة المصفّرة
+        }).filter(row => row.balance !== 0)
           .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
 
-        // 3. Extract Unique Categories
+        // 3. Extract Unique Categories & Build Views
         const cats = Array.from(new Set(clients.map(c => c.category || 'عام')));
-
+        
         setTransactionsData(txData);
         setBalancesData(balData);
         setCategories(cats);
+        setViews(['transactions', 'الكل', ...cats]); // Building the unified swipe track
+
       } catch (error) {
         toast.error('حدث خطأ أثناء تحميل البيانات');
       } finally {
@@ -91,11 +93,11 @@ const ReportsPage = () => {
     fetchData();
   }, []);
 
-  const fullCategoriesList = ['الكل', ...categories];
-  
-  const filteredBalances = selectedCategory === 'الكل' 
+  const currentView = views[activeViewIndex];
+
+  const filteredBalances = currentView === 'الكل' 
     ? balancesData 
-    : balancesData.filter(b => b.category === selectedCategory);
+    : balancesData.filter(b => b.category === currentView);
 
   // --- Swipe Logic Handlers ---
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -107,30 +109,25 @@ const ReportsPage = () => {
     const touchEndX = e.changedTouches[0].clientX;
     const diff = touchStartX.current - touchEndX;
     
-    const currentIndex = fullCategoriesList.indexOf(selectedCategory);
-
-    // RTL Swipe Logic:
-    // Swiping Right (diff < -50) goes to Next category
-    // Swiping Left (diff > 50) goes to Previous category
-    if (diff < -50 && currentIndex < fullCategoriesList.length - 1) {
-      setSelectedCategory(fullCategoriesList[currentIndex + 1]);
-    } else if (diff > 50 && currentIndex > 0) {
-      setSelectedCategory(fullCategoriesList[currentIndex - 1]);
+    // RTL Swipe:
+    // Swipe Left (diff > 50) -> Next View
+    // Swipe Right (diff < -50) -> Prev View
+    if (diff > 50 && activeViewIndex < views.length - 1) {
+      setActiveViewIndex(prev => prev + 1);
+    } else if (diff < -50 && activeViewIndex > 0) {
+      setActiveViewIndex(prev => prev - 1);
     }
     
     touchStartX.current = null;
   };
 
-  const nextCategory = () => {
-    const currentIndex = fullCategoriesList.indexOf(selectedCategory);
-    if (currentIndex < fullCategoriesList.length - 1) setSelectedCategory(fullCategoriesList[currentIndex + 1]);
+  const nextView = () => {
+    if (activeViewIndex < views.length - 1) setActiveViewIndex(prev => prev + 1);
   };
 
-  const prevCategory = () => {
-    const currentIndex = fullCategoriesList.indexOf(selectedCategory);
-    if (currentIndex > 0) setSelectedCategory(fullCategoriesList[currentIndex - 1]);
+  const prevView = () => {
+    if (activeViewIndex > 0) setActiveViewIndex(prev => prev - 1);
   };
-
 
   // --- Sharing & Export Logic ---
   const handleSharePDF = async () => {
@@ -145,7 +142,7 @@ const ReportsPage = () => {
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       
       const blob = pdf.output('blob');
-      const file = new File([blob], `تقرير_${activeTab === 'transactions' ? 'المعاملات' : 'الارصدة'}.pdf`, { type: 'application/pdf' });
+      const file = new File([blob], `تقرير_${currentView === 'transactions' ? 'المعاملات' : 'الارصدة'}.pdf`, { type: 'application/pdf' });
       
       toast.dismiss(loadingToast);
       setShowShareModal(false);
@@ -163,7 +160,7 @@ const ReportsPage = () => {
       const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
       canvas.toBlob(async (blob) => {
         if (blob) {
-          const file = new File([blob], `تقرير_${activeTab === 'transactions' ? 'المعاملات' : 'الارصدة'}.png`, { type: 'image/png' });
+          const file = new File([blob], `تقرير_${currentView === 'transactions' ? 'المعاملات' : 'الارصدة'}.png`, { type: 'image/png' });
           toast.dismiss(loadingToast);
           setShowShareModal(false);
           await shareFileNative(file, 'صورة تقرير', 'إليك التقرير المطلوب');
@@ -180,7 +177,7 @@ const ReportsPage = () => {
     try {
       let csvContent = "\uFEFF"; // BOM for Arabic support
       
-      if (activeTab === 'transactions') {
+      if (currentView === 'transactions') {
         csvContent += "التاريخ,اسم العميل,المبلغ,النوع,التفاصيل\n";
         transactionsData.forEach(tx => {
           const typeStr = tx.type === 'debit' ? 'عليه' : 'له';
@@ -195,7 +192,7 @@ const ReportsPage = () => {
       }
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const file = new File([blob], `تقرير_${activeTab === 'transactions' ? 'المعاملات' : 'الارصدة'}.csv`, { type: 'text/csv' });
+      const file = new File([blob], `تقرير_${currentView === 'transactions' ? 'المعاملات' : 'الارصدة'}.csv`, { type: 'text/csv' });
       
       toast.dismiss(loadingToast);
       setShowShareModal(false);
@@ -208,17 +205,16 @@ const ReportsPage = () => {
 
   const handleShareText = async () => {
     try {
-      let text = `📄 تقرير ${activeTab === 'transactions' ? 'سجل المعاملات' : 'أرصدة التصنيفات'}\n`;
+      let text = `📄 تقرير ${currentView === 'transactions' ? 'سجل المعاملات' : `أرصدة التصنيفات (${currentView})`}\n`;
       text += `📅 التاريخ: ${new Date().toISOString().split('T')[0]}\n\n`;
 
-      if (activeTab === 'transactions') {
+      if (currentView === 'transactions') {
         transactionsData.forEach(tx => {
           text += `▪ ${tx.date} | ${tx.clientName}\n`;
           text += `المبلغ: ${tx.amount} (${tx.type === 'debit' ? 'عليه' : 'له'}) - ${tx.details}\n`;
           text += `-----------------\n`;
         });
       } else {
-        text += `التصنيف: ${selectedCategory}\n\n`;
         filteredBalances.forEach(b => {
           text += `▪ ${b.clientName}: ${formatNumber(Math.abs(b.balance))} (${b.balance > 0 ? 'عليه' : 'له'})\n`;
         });
@@ -232,7 +228,7 @@ const ReportsPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+    <div className="min-h-screen bg-background flex flex-col overflow-x-hidden" dir="rtl">
       {/* --- HEADER --- */}
       <div className="bg-header text-header flex items-center justify-between p-4 shadow-md sticky top-0 z-40">
         <div className="flex items-center gap-3">
@@ -241,144 +237,128 @@ const ReportsPage = () => {
           </button>
           <h1 className="text-xl font-bold">التقارير</h1>
         </div>
-        {/* Export Button */}
-        <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors">
+        <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors active:scale-95">
           <Share2 className="w-5 h-5" />
           <span className="text-sm font-bold">تصدير</span>
         </button>
       </div>
 
-      {/* --- TABS --- */}
-      <div className="bg-card border-b border-border p-3">
-        <div className="flex bg-muted rounded-xl p-1 shadow-inner">
-          <button
-            onClick={() => setActiveTab('transactions')}
-            className={`flex-1 py-2.5 text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all ${activeTab === 'transactions' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-background/50'}`}
-          >
-            <ListFilter className="w-4 h-4" /> سجل المعاملات
-          </button>
-          <button
-            onClick={() => setActiveTab('balances')}
-            className={`flex-1 py-2.5 text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all ${activeTab === 'balances' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-background/50'}`}
-          >
-            <Users className="w-4 h-4" /> أرصدة التصنيفات
-          </button>
+      {/* --- DOTS INDICATOR & NAVIGATION --- */}
+      <div className="bg-card border-b border-border p-3 flex flex-col items-center justify-center shadow-sm">
+        <div className="w-full flex items-center justify-between mb-2 px-2">
+           <button onClick={prevView} disabled={activeViewIndex === 0} className="p-2 bg-muted rounded-full disabled:opacity-20 active:scale-90 transition-all"><ChevronRight className="w-5 h-5"/></button>
+           
+           <div className="flex flex-col items-center animate-fade-in" key={currentView}>
+             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-0.5">نوع التقرير</span>
+             <h2 className="text-base font-black text-primary">
+               {currentView === 'transactions' ? 'سجل المعاملات الشامل' : `أرصدة التصنيفات (${currentView})`}
+             </h2>
+           </div>
+
+           <button onClick={nextView} disabled={activeViewIndex === views.length - 1} className="p-2 bg-muted rounded-full disabled:opacity-20 active:scale-90 transition-all"><ChevronLeft className="w-5 h-5"/></button>
+        </div>
+
+        {/* Dots */}
+        <div className="flex gap-1.5 mt-1">
+          {views.map((v, i) => (
+            <div key={v} className={`h-1.5 rounded-full transition-all duration-300 ${i === activeViewIndex ? 'w-6 bg-primary shadow-sm' : 'w-2 bg-muted-foreground/30'}`} />
+          ))}
         </div>
       </div>
 
-      {/* --- REPORT CONTENT (To be captured) --- */}
-      <div ref={reportRef} className="flex-1 bg-background p-3 pb-24">
-        
-        {/* Print Header */}
-        <div className="hidden print-header text-center mb-4 pb-2 border-b-2 border-primary">
-          <h2 className="text-xl font-black text-foreground">
-            {activeTab === 'transactions' ? 'سجل المعاملات الشامل' : `تقرير أرصدة التصنيفات (${selectedCategory})`}
-          </h2>
-          <p className="text-sm text-muted-foreground">تاريخ الإصدار: {new Date().toISOString().split('T')[0]}</p>
-        </div>
+      {/* --- REPORT CONTENT (Swipeable Container) --- */}
+      <div 
+        className="flex-1 bg-background p-3 pb-24"
+        onTouchStart={handleTouchStart} 
+        onTouchEnd={handleTouchEnd}
+      >
+        <div ref={reportRef} className="animate-slide-up" key={currentView}>
+          
+          {/* Print Header (Hidden on screen, visible in PDF) */}
+          <div className="hidden print-header text-center mb-4 pb-2 border-b-2 border-primary">
+            <h2 className="text-xl font-black text-foreground">
+              {currentView === 'transactions' ? 'سجل المعاملات الشامل' : `تقرير أرصدة التصنيفات (${currentView})`}
+            </h2>
+            <p className="text-sm text-muted-foreground">تاريخ الإصدار: {new Date().toISOString().split('T')[0]}</p>
+          </div>
 
-        <Card className="shadow-lg border-0 overflow-hidden rounded-2xl">
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="p-10 text-center font-bold text-muted-foreground">جاري تحميل التقرير...</div>
-            ) : (
-              <>
-                {/* 1. Transactions View */}
-                {activeTab === 'transactions' && (
-                  <>
-                    <div className="bg-table-header text-table-header grid grid-cols-[80px_1fr_80px_1.5fr] text-center text-[12px] font-extrabold py-3 px-2 border-b border-border/50 sticky top-0 shadow-sm">
-                      <div className="text-right pr-2">التاريخ</div>
-                      <div className="text-right">العميل</div>
-                      <div>المبلغ</div>
-                      <div className="text-right">التفاصيل</div>
-                    </div>
-                    <div className="divide-y divide-border/40">
-                      {transactionsData.length === 0 ? (
-                        <div className="p-8 text-center text-muted-foreground font-bold">لا توجد معاملات مسجلة</div>
-                      ) : (
-                        transactionsData.map((tx, idx) => (
-                          <div key={idx} className={`grid grid-cols-[80px_1fr_80px_1.5fr] py-3 px-2 items-center ${idx % 2 === 0 ? 'bg-white' : 'bg-muted/5'}`}>
-                            <div className="text-right text-[10px] font-bold text-muted-foreground pr-1">{tx.date}</div>
-                            <div className="text-right text-xs font-bold text-foreground truncate pl-2">{tx.clientName}</div>
-                            <div className="flex items-center justify-center gap-0.5 font-black text-xs">
-                              {tx.type === 'debit' ? <ArrowDown className="w-3 h-3 text-debit"/> : <ArrowUp className="w-3 h-3 text-credit"/>}
-                              <span className={tx.type === 'debit' ? 'text-debit' : 'text-credit'} dir="ltr">{formatNumber(tx.amount)}</span>
-                            </div>
-                            <div className="text-right text-[11px] font-bold text-foreground break-words leading-tight">{tx.details}</div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </>
-                )}
-
-                {/* 2. Balances View (With Swipe Logic) */}
-                {activeTab === 'balances' && (
-                  <div 
-                    onTouchStart={handleTouchStart} 
-                    onTouchEnd={handleTouchEnd}
-                    className="animate-fade-in"
-                    key={selectedCategory} // Forces re-render for animation when category changes
-                  >
-                    {/* Category Swipe Indicator Header */}
-                    <div className="bg-muted/30 flex items-center justify-between p-3 border-b border-border select-none">
-                      <button 
-                        onClick={prevCategory} 
-                        disabled={fullCategoriesList.indexOf(selectedCategory) === 0}
-                        className="p-1 hover:bg-muted rounded-full transition-colors disabled:opacity-30"
-                      >
-                        <ChevronRight className="w-5 h-5 text-foreground" />
-                      </button>
-                      
-                      <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-0.5">تصنيف التقرير</span>
-                        <span className="text-sm font-extrabold text-primary">{selectedCategory}</span>
+          <Card className="shadow-lg border-0 overflow-hidden rounded-2xl">
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-10 text-center font-bold text-muted-foreground">جاري تحميل التقرير...</div>
+              ) : (
+                <>
+                  {/* 1. Transactions View */}
+                  {currentView === 'transactions' && (
+                    <>
+                      <div className="bg-table-header text-table-header grid grid-cols-[80px_1fr_80px_1.5fr] text-center text-[12px] font-extrabold py-3 px-2 border-b border-border/50 sticky top-0 shadow-sm">
+                        <div className="text-right pr-2">التاريخ</div>
+                        <div className="text-right">العميل</div>
+                        <div>المبلغ</div>
+                        <div className="text-right">التفاصيل</div>
                       </div>
-
-                      <button 
-                        onClick={nextCategory} 
-                        disabled={fullCategoriesList.indexOf(selectedCategory) === fullCategoriesList.length - 1}
-                        className="p-1 hover:bg-muted rounded-full transition-colors disabled:opacity-30"
-                      >
-                        <ChevronLeft className="w-5 h-5 text-foreground" />
-                      </button>
-                    </div>
-
-                    <div className="bg-table-header text-table-header flex justify-between text-[13px] font-extrabold py-3 px-5 border-b border-border/50 sticky top-0 shadow-sm">
-                      <div className="text-right">اسم العميل</div>
-                      <div className="text-left">الرصيد النهائي</div>
-                    </div>
-                    
-                    <div className="divide-y divide-border/40">
-                      {filteredBalances.length === 0 ? (
-                        <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-2">
-                           <Users className="w-10 h-10 opacity-20 mb-2" />
-                           <span className="font-bold">لا يوجد أرصدة في تصنيف "{selectedCategory}"</span>
-                           <span className="text-xs">اسحب لليمين أو اليسار للتنقل</span>
-                        </div>
-                      ) : (
-                        filteredBalances.map((b, idx) => (
-                          <div key={idx} className={`flex justify-between py-4 px-5 items-center ${idx % 2 === 0 ? 'bg-white' : 'bg-muted/5'}`}>
-                            <div className="text-right text-sm font-bold text-foreground">{b.clientName}</div>
-                            <div className="text-left flex items-center gap-1.5 font-black text-sm">
-                              {b.balance > 0 ? <ArrowDown className="w-4 h-4 text-debit"/> : <ArrowUp className="w-4 h-4 text-credit"/>}
-                              <span className="text-foreground" dir="ltr">{formatNumber(Math.abs(b.balance))}</span>
-                            </div>
+                      <div className="divide-y divide-border/40 select-none">
+                        {transactionsData.length === 0 ? (
+                          <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-2">
+                             <ListFilter className="w-10 h-10 opacity-20 mb-2" />
+                             <span className="font-bold">لا توجد معاملات مسجلة</span>
+                             <span className="text-xs">اسحب لليمين أو اليسار للتنقل للتقارير الأخرى</span>
                           </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
+                        ) : (
+                          transactionsData.map((tx, idx) => (
+                            <div key={idx} className={`grid grid-cols-[80px_1fr_80px_1.5fr] py-3 px-2 items-center ${idx % 2 === 0 ? 'bg-white' : 'bg-muted/5'}`}>
+                              <div className="text-right text-[10px] font-bold text-muted-foreground pr-1">{tx.date}</div>
+                              <div className="text-right text-xs font-bold text-foreground truncate pl-2">{tx.clientName}</div>
+                              <div className="flex items-center justify-center gap-0.5 font-black text-xs">
+                                {tx.type === 'debit' ? <ArrowDown className="w-3 h-3 text-debit"/> : <ArrowUp className="w-3 h-3 text-credit"/>}
+                                <span className={tx.type === 'debit' ? 'text-debit' : 'text-credit'} dir="ltr">{formatNumber(tx.amount)}</span>
+                              </div>
+                              <div className="text-right text-[11px] font-bold text-foreground break-words leading-tight">{tx.details}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* 2. Balances View */}
+                  {currentView !== 'transactions' && (
+                    <>
+                      <div className="bg-table-header text-table-header flex justify-between text-[13px] font-extrabold py-3 px-5 border-b border-border/50 sticky top-0 shadow-sm">
+                        <div className="text-right">اسم العميل</div>
+                        <div className="text-left">الرصيد النهائي</div>
+                      </div>
+                      <div className="divide-y divide-border/40 select-none">
+                        {filteredBalances.length === 0 ? (
+                          <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-2">
+                             <Users className="w-10 h-10 opacity-20 mb-2" />
+                             <span className="font-bold">لا توجد أرصدة مسجلة في هذا التصنيف</span>
+                             <span className="text-xs">اسحب لليمين أو اليسار للتنقل</span>
+                          </div>
+                        ) : (
+                          filteredBalances.map((b, idx) => (
+                            <div key={idx} className={`flex justify-between py-4 px-5 items-center ${idx % 2 === 0 ? 'bg-white' : 'bg-muted/5'}`}>
+                              <div className="text-right text-sm font-bold text-foreground">{b.clientName}</div>
+                              <div className="text-left flex items-center gap-1.5 font-black text-sm">
+                                {b.balance > 0 ? <ArrowDown className="w-4 h-4 text-debit"/> : <ArrowUp className="w-4 h-4 text-credit"/>}
+                                <span className="text-foreground" dir="ltr">{formatNumber(Math.abs(b.balance))}</span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* --- SHARE MODAL --- */}
       {showShareModal && (
-        <div className="fixed inset-0 bg-foreground/50 backdrop-blur-sm z-50 flex items-end justify-center animate-fade-in" onClick={() => setShowShareModal(false)}>
+        <div className="fixed inset-0 bg-foreground/50 backdrop-blur-sm z-[100] flex items-end justify-center animate-fade-in" onClick={() => setShowShareModal(false)}>
           <div className="bg-card w-full rounded-t-3xl p-6 space-y-5 animate-slide-up shadow-2xl border-t border-border" onClick={e => e.stopPropagation()}>
             <div className="w-12 h-1.5 bg-muted mx-auto rounded-full mb-2" />
             <div className="text-center">
@@ -387,25 +367,25 @@ const ReportsPage = () => {
             </div>
             
             <div className="grid grid-cols-2 gap-4 mt-4">
-              <button onClick={handleSharePDF} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center group-active:scale-90 transition-transform"><FileDown className="w-6 h-6 text-primary" /></div>
+              <button onClick={handleSharePDF} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><FileDown className="w-6 h-6 text-primary" /></div>
                 <span className="font-bold text-sm">ملف PDF</span>
               </button>
-              <button onClick={handleShareImage} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center group-active:scale-90 transition-transform"><ImageIcon className="w-6 h-6 text-primary" /></div>
+              <button onClick={handleShareImage} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><ImageIcon className="w-6 h-6 text-primary" /></div>
                 <span className="font-bold text-sm">صورة تقرير</span>
               </button>
-              <button onClick={handleShareCSV} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center group-active:scale-90 transition-transform"><FileSpreadsheet className="w-6 h-6 text-primary" /></div>
+              <button onClick={handleShareCSV} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><FileSpreadsheet className="w-6 h-6 text-primary" /></div>
                 <span className="font-bold text-sm">ملف إكسل</span>
               </button>
-              <button onClick={handleShareText} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center group-active:scale-90 transition-transform"><Type className="w-6 h-6 text-primary" /></div>
+              <button onClick={handleShareText} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><Type className="w-6 h-6 text-primary" /></div>
                 <span className="font-bold text-sm">نص فقط</span>
               </button>
             </div>
             
-            <button onClick={() => setShowShareModal(false)} className="w-full mt-2 p-4 rounded-xl bg-muted text-foreground font-bold hover:bg-muted/80 transition-colors">إلغاء</button>
+            <button onClick={() => setShowShareModal(false)} className="w-full mt-2 p-4 rounded-xl bg-muted text-foreground font-bold hover:bg-muted/80 transition-colors active:scale-95">إلغاء</button>
           </div>
         </div>
       )}

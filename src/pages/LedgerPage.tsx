@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getClient, getTransactionsByClient, addTransaction as dbAddTransaction, updateTransaction, deleteTransaction as dbDeleteTransaction, updateClient, type Client, type Transaction } from '@/lib/db';
+import { getClient, getTransactionsByClient, addTransaction as dbAddTransaction, updateTransaction, deleteTransaction as dbDeleteTransaction, deleteAllTransactions, updateClient, type Client, type Transaction } from '@/lib/db';
 import AppHeader from '@/components/AppHeader';
+import ClientRating from '@/components/ClientRating';
+import ClientNotesSheet from '@/components/ClientNotesSheet';
 import { Card, CardContent } from '@/components/ui/card';
-import { Share2, Plus, AlertTriangle, Pencil, Trash2, X, StickyNote, HelpCircle, MoreVertical, Search, Lock, ShieldAlert, Palette, FileDown, Type, Image as ImageIcon, FileSpreadsheet, ArrowDown, ArrowUp, CheckSquare, Square, Copy, Star, Eraser } from 'lucide-react';
+import { Phone, MessageCircle, Share2, Plus, AlertTriangle, Pencil, Trash2, FileText, X, StickyNote, HelpCircle, MoreVertical, Search, Printer, FileSpreadsheet, MessageSquare, Lock, ArrowRightLeft, Bell, ShieldAlert, ListFilter, Camera, Palette, FileDown, Type, Image as ImageIcon, Eraser } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatNumber } from '@/lib/utils';
 import { exportLedgerPDF } from '@/lib/pdfExport';
@@ -17,43 +19,56 @@ const LedgerPage = () => {
   const [totalDebit, setTotalDebit] = useState(0);
   const [totalCredit, setTotalCredit] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   
+  // States for Edit
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [editDetails, setEditDetails] = useState('');
   const [editDate, setEditDate] = useState('');
   const [editType, setEditType] = useState<'debit' | 'credit'>('debit'); 
   
+  // UI States
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
-  const [newNote, setNewNote] = useState('');
+  const [showHelp, setShowHelp] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false); 
-  const [showLimitModal, setShowLimitModal] = useState(false);
-  const [showRatingModal, setShowRatingModal] = useState(false);
-  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
-  const [newLimit, setNewLimit] = useState('');
-  const [showColorPicker, setShowColorPicker] = useState(false);
-
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedTxIds, setSelectedTxIds] = useState<number[]>([]);
-  const [contextMenuTx, setContextMenuTx] = useState<(Transaction & { balance: number }) | null>(null);
+  
+  // New States for Long Press & Modals
+  const [longPressedTx, setLongPressedTx] = useState<(Transaction & { balance: number }) | null>(null);
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [newLimit, setNewLimit] = useState('');
+  const [showCloseBalanceModal, setShowCloseBalanceModal] = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!clientId) return;
     setLoading(true);
     const c = await getClient(Number(clientId));
-    if (c) { setClient(c); setNewLimit(c.budgetLimit?.toString() || '0'); }
+    if (c) {
+      setClient(c);
+      setNewLimit(c.budgetLimit?.toString() || '0');
+    }
+
     const txns = await getTransactionsByClient(Number(clientId));
     let balance = 0, dTotal = 0, cTotal = 0;
+    
     const withBalance = txns.map(t => {
       const safeAmount = Number(t.amount) || 0;
-      if (t.type === 'debit') { balance += safeAmount; dTotal += safeAmount; }
+      const safeDetails = t.details || '';
+      const safeDate = t.date || '';
+      const safeType = t.type === 'credit' ? 'credit' : 'debit';
+
+      if (safeType === 'debit') { balance += safeAmount; dTotal += safeAmount; }
       else { balance -= safeAmount; cTotal += safeAmount; }
-      return { ...t, balance };
+      
+      return { ...t, amount: safeAmount, details: safeDetails, date: safeDate, type: safeType, balance };
     });
+    
     setTransactions(withBalance.reverse());
     setTotalDebit(dTotal);
     setTotalCredit(cTotal);
@@ -68,51 +83,59 @@ const LedgerPage = () => {
   const consumed = budgetLimit > 0 ? Math.min(((totalDebit - totalCredit) / budgetLimit) * 100, 100) : 0;
   const isOverBudget = budgetLimit > 0 && remaining < 0;
 
+  const filteredTransactions = searchQuery
+    ? transactions.filter(tx => 
+        (tx.details || '').includes(searchQuery) || 
+        (tx.amount || 0).toString().includes(searchQuery) || 
+        (tx.date || '').includes(searchQuery)
+      )
+    : transactions;
+
   const handleTouchStart = (tx: Transaction & { balance: number }) => {
     pressTimer.current = setTimeout(() => {
       if (navigator.vibrate) navigator.vibrate(50);
-      if (!isSelectionMode) setContextMenuTx(tx);
-    }, 600);
-  };
-  const handleTouchEnd = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
-
-  const handleRowClick = (tx: Transaction & { balance: number }) => {
-    if (isSelectionMode) {
-      setSelectedTxIds(prev => prev.includes(tx.id!) ? prev.filter(id => id !== tx.id) : [...prev, tx.id!]);
-    }
+      setLongPressedTx(tx);
+    }, 500); 
   };
 
-  const handleRatingChange = async (rating: 'excellent' | 'average' | 'poor') => {
+  const handleTouchEnd = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+  };
+
+  const handleSaveLimit = async () => {
     if (!client?.id) return;
-    await updateClient(client.id, { rating });
-    setClient(prev => prev ? { ...prev, rating } : prev);
-    toast.success('تم التقييم');
-  };
-
-  const handleAddNote = async () => {
-    if (!client?.id || !newNote.trim()) return;
-    const updatedNotes = [...(client.notes || []), newNote.trim()];
-    await updateClient(client.id, { notes: updatedNotes });
-    setClient(prev => prev ? { ...prev, notes: updatedNotes } : prev);
-    setNewNote('');
-    toast.success('تم حفظ الملاحظة');
-  };
-
-  const handleDeleteNote = async (index: number) => {
-    if (!client?.id) return;
-    const updatedNotes = (client.notes || []).filter((_, i) => i !== index);
-    await updateClient(client.id, { notes: updatedNotes });
-    setClient(prev => prev ? { ...prev, notes: updatedNotes } : prev);
-  };
-
-  const handleClearAllTransactions = async () => {
-    if (!client?.id) return;
-    for (const tx of transactions) {
-      if (tx.id) await dbDeleteTransaction(tx.id);
-    }
-    setShowDeleteAllConfirm(false);
-    toast.success('تم حذف جميع المعاملات');
+    await updateClient(client.id, { budgetLimit: Number(newLimit) });
+    setShowLimitModal(false);
     loadData();
+    toast.success('تم تحديث سقف الحساب بنجاح');
+  };
+
+  const handleCloseBalance = async () => {
+    if (!client?.id || netBalance === 0) {
+      toast.info('الرصيد مصفر بالفعل');
+      setShowCloseBalanceModal(false);
+      return;
+    }
+    const amountToZero = Math.abs(netBalance);
+    const type = netBalance >= 0 ? 'credit' : 'debit'; 
+    await dbAddTransaction({ 
+      clientId: client.id, 
+      amount: amountToZero, 
+      type, 
+      date: new Date().toISOString().split('T')[0], 
+      details: 'إغلاق وتصفية الحساب' 
+    });
+    setShowCloseBalanceModal(false);
+    loadData();
+    toast.success('تم تصفية الرصيد بنجاح ✓');
+  };
+
+  const startEditTx = (tx: Transaction & { balance: number }) => {
+    setEditingTx(tx);
+    setEditAmount((tx.amount || 0).toString());
+    setEditDetails(tx.details || '');
+    setEditDate(tx.date || '');
+    setEditType(tx.type);
   };
 
   const saveEditTx = async () => {
@@ -124,8 +147,117 @@ const LedgerPage = () => {
       type: editType,
     });
     setEditingTx(null);
+    toast.success('تم تعديل المعاملة ✓');
     loadData();
-    toast.success('تم التعديل');
+  };
+
+  const confirmDeleteTx = async () => {
+    if (showDeleteConfirm === null) return;
+    await dbDeleteTransaction(showDeleteConfirm);
+    setShowDeleteConfirm(null);
+    toast.success('تم حذف المعاملة');
+    loadData();
+  };
+
+  const handleClearAllTransactions = async () => {
+    if (!client?.id) return;
+    await deleteAllTransactions(client.id);
+    setShowDeleteAllConfirm(false);
+    setShowMenu(false);
+    toast.success('تم حذف جميع المعاملات بنجاح');
+    loadData();
+  };
+
+  const handleRatingChange = async (rating: 'excellent' | 'average' | 'poor') => {
+    if (!client?.id) return;
+    await updateClient(client.id, { rating });
+    setClient(prev => prev ? { ...prev, rating } : prev);
+    toast.success('تم تحديث التقييم ✓');
+  };
+
+  const handleAddNote = async (note: string) => {
+    if (!client?.id) return;
+    const updatedNotes = [...(client.notes || []), note];
+    await updateClient(client.id, { notes: updatedNotes });
+    setClient(prev => prev ? { ...prev, notes: updatedNotes } : prev);
+  };
+
+  const handleDeleteNote = async (index: number) => {
+    if (!client?.id) return;
+    const updatedNotes = [...(client.notes || [])];
+    updatedNotes.splice(index, 1);
+    await updateClient(client.id, { notes: updatedNotes });
+    setClient(prev => prev ? { ...prev, notes: updatedNotes } : prev);
+  };
+
+  const handleColorSelect = async (color: string) => {
+    if (!longPressedTx?.id) return;
+    await updateTransaction(longPressedTx.id, { color });
+    setLongPressedTx(null);
+    setShowColorPicker(false);
+    loadData();
+    toast.success('تم تلوين المعاملة ✓');
+  };
+
+  const handleSharePDF = async () => {
+    if (!client) return;
+    toast.info('جاري تجهيز ملف PDF...');
+    try {
+      const blob = await exportLedgerPDF(client, transactions, totalDebit, totalCredit, netBalance);
+      const fileName = `كشف_حساب_${client.name}.pdf`;
+      const file = new File([blob], fileName, { type: 'application/pdf' });
+      await shareFileNative(file, 'كشف حساب PDF', `كشف حساب العميل ${client.name}`);
+    } catch (error) {
+      toast.error('حدث خطأ أثناء تصدير PDF');
+    }
+    setShowShareModal(false);
+  };
+
+  const handleShareExcel = async () => {
+    if (!client) return;
+    toast.info('جاري تجهيز ملف الإكسل...');
+    try {
+      const file = await generateExcelFile(client, transactions);
+      await shareFileNative(file, 'كشف حساب Excel', `كشف حساب العميل ${client.name}`);
+    } catch (error) {
+      toast.error('حدث خطأ أثناء تصدير Excel');
+    }
+    setShowShareModal(false);
+  };
+
+  const handleShareText = async () => {
+    if (!client) return;
+    const text = generateShareText(client, transactions, totalDebit, totalCredit, netBalance);
+    await shareTextNative(`كشف حساب ${client.name}`, text);
+    setShowShareModal(false);
+  };
+
+  const handleShareImage = async () => {
+    toast.info('جاري تجهيز الصورة، الرجاء الانتظار...');
+    try {
+      const module = await import('html2canvas');
+      const html2canvas = (module as any).default || (module as any);
+      const element = document.getElementById('ledger-content-to-capture');
+      if (!element) return;
+
+      const canvas = await html2canvas(element, {
+        useCORS: true,
+        scale: 2,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+
+      canvas.toBlob(async (blob: Blob | null) => {
+        if (blob) {
+          const fileName = `كشف_حساب_${client?.name || 'عميل'}.png`;
+          const file = new File([blob], fileName, { type: 'image/png' });
+          await shareFileNative(file, 'صورة كشف الحساب', `كشف حساب العميل ${client?.name}`);
+        }
+      }, 'image/png');
+    } catch (error) {
+      toast.error('فشل إنشاء الصورة');
+    }
+    setShowShareModal(false);
   };
 
   return (
@@ -165,19 +297,6 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {isSelectionMode && (
-        <div className="fixed top-0 left-0 right-0 h-14 bg-header text-header z-[60] flex items-center justify-between px-4 shadow-lg animate-fade-in" dir="rtl">
-          <div className="flex items-center gap-4">
-            <button onClick={() => {setIsSelectionMode(false); setSelectedTxIds([]);}} className="p-2 bg-white/20 rounded-lg"><X className="w-5 h-5"/></button>
-            <span className="font-bold">{selectedTxIds.length} محدد</span>
-          </div>
-          <button onClick={async () => {
-            for (const id of selectedTxIds) await dbDeleteTransaction(id);
-            setIsSelectionMode(false); setSelectedTxIds([]); loadData(); toast.success('تم الحذف');
-          }} className="flex items-center gap-2 bg-red-500 px-4 py-1.5 rounded-lg text-sm font-bold shadow-md active:scale-95 transition-transform">حذف المحدد</button>
-        </div>
-      )}
-
       {budgetLimit > 0 && (
         <div className="mx-3 mt-3 rounded-2xl overflow-hidden shadow-xl border border-white/10 animate-fade-in">
           <div className="bg-gradient-to-l from-[#5D4037] to-[#8D6E63] text-white p-5">
@@ -191,67 +310,9 @@ const LedgerPage = () => {
                   <span className="text-[10px] block opacity-70">السقف</span>
                   <span className="text-sm font-bold" dir="ltr">{formatNumber(budgetLimit)}</span>
                 </div>
-                <div className="bg-black/20 px-3 py-1.5 rounded-lg text-right min-w-[80px]">
-                  <span className="text-[10px] block opacity-70">الاستهلاك</span>
-                  <span className="text-sm font-bold" dir="ltr">{formatNumber(totalDebit - totalCredit)}</span>
-                </div>
-              </div>
-            </div>
-            <div className="w-full h-3 bg-black/30 rounded-full overflow-hidden shadow-inner">
-              <div className={`h-full rounded-full transition-all duration-1000 ${isOverBudget ? 'bg-red-500' : 'bg-yellow-400'}`} style={{ width: `${Math.min(consumed, 100)}%` }} />
-            </div>
-          </div>
-        </div>
-      )}
+                <div className
 
-      <div className="p-3 flex-1 mt-2">
-        <Card className="shadow-lg border-0 overflow-hidden rounded-2xl">
-          <CardContent className="p-0">
-            {showSearch && (
-              <div className="p-3 bg-muted/10 border-b border-border flex items-center gap-2 animate-slide-down">
-                <Search className="w-5 h-5 text-muted-foreground" />
-                <input autoFocus placeholder="بحث سريع..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-transparent outline-none font-bold text-sm" />
-                <button onClick={() => setShowSearch(false)}><X className="w-5 h-5"/></button>
-              </div>
-            )}
-            <div className="bg-[#5D4037] text-white flex text-center text-[11px] font-extrabold py-3 px-3 shadow-md">
-              <div className="w-[65px] text-right">التاريخ</div>
-              <div className="w-[80px]">المبلغ</div>
-              <div className="flex-1 text-right pr-4">التفاصيل</div>
-              <div className="w-[75px] text-left">الرصيد</div>
-            </div>
-            <div className="divide-y divide-border/30 select-none">
-              {!loading && transactions.filter(tx => (tx.details || '').includes(searchQuery) || (tx.amount || 0).toString().includes(searchQuery)).map((tx, idx) => (
-                <div
-                  key={tx.id || idx}
-                  onTouchStart={() => handleTouchStart(tx)}
-                  onTouchEnd={handleTouchEnd}
-                  onMouseDown={() => handleTouchStart(tx)}
-                  onMouseUp={handleTouchEnd}
-                  onClick={() => handleRowClick(tx)}
-                  className={`flex py-4 px-3 items-center transition-all relative ${selectedTxIds.includes(tx.id!) ? 'bg-primary/20 scale-[0.98]' : idx % 2 === 0 ? 'bg-white' : 'bg-muted/5'}`}
-                  style={{ backgroundColor: !selectedTxIds.includes(tx.id!) && tx.color ? tx.color : undefined }}
-                >
-                  {isSelectionMode && (
-                    <div className="absolute right-1 top-1/2 -translate-y-1/2">
-                      {selectedTxIds.includes(tx.id!) ? <CheckSquare className="text-primary w-5 h-5" /> : <Square className="text-muted-foreground w-5 h-5" />}
-                    </div>
-                  )}
-                  <div className={`w-[65px] text-right text-[10px] font-bold text-muted-foreground whitespace-nowrap ${isSelectionMode ? 'pr-6' : ''}`}>{tx.date}</div>
-                  <div className={`w-[80px] flex items-center justify-center gap-1 font-black text-xs ${tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}`}>
-                    {tx.type === 'debit' ? <ArrowDown className="w-3 h-3"/> : <ArrowUp className="w-3 h-3"/>}
-                    <span dir="ltr">{formatNumber(tx.amount)}</span>
-                  </div>
-                  <div className="flex-1 text-right text-[13px] font-bold text-foreground break-words pr-4 leading-tight">{tx.details}</div>
-                  <div className="w-[75px] text-left font-bold text-[12px] text-foreground/80" dir="ltr">{formatNumber(Math.abs(tx.balance))}</div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <footer className="fixed bottom-0 left-0 right-0 bg-[#5D4037] text-white p-3 z-40 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.15)]">
+            <footer className="fixed bottom-0 left-0 right-0 bg-[#5D4037] text-white p-3 z-40 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.15)]">
         <div className="flex items-center justify-between px-2 w-full">
           <button onClick={() => navigate(`/add-transaction?clientId=${client?.id}`)} className="w-14 h-14 bg-white text-[#5D4037] rounded-2xl flex items-center justify-center shadow-lg active:scale-90 transition-transform">
             <Plus className="w-8 h-8 font-black" />
@@ -269,6 +330,36 @@ const LedgerPage = () => {
         </div>
       </footer>
 
+      {showShareModal && (
+        <div className="fixed inset-0 bg-foreground/50 backdrop-blur-sm z-[100] flex items-end justify-center animate-fade-in" onClick={() => setShowShareModal(false)}>
+          <div className="bg-card w-full rounded-t-3xl p-6 space-y-5 animate-slide-up shadow-2xl border-t border-border" onClick={e => e.stopPropagation()} dir="rtl">
+            <div className="w-12 h-1.5 bg-muted mx-auto rounded-full mb-2" />
+            <div className="text-center">
+              <h3 className="text-xl font-extrabold text-foreground">مشاركة كشف الحساب</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <button onClick={handleSharePDF} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><FileDown className="w-6 h-6 text-primary" /></div>
+                <span className="font-bold text-sm">ملف PDF</span>
+              </button>
+              <button onClick={handleShareImage} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><ImageIcon className="w-6 h-6 text-primary" /></div>
+                <span className="font-bold text-sm">صورة كشف</span>
+              </button>
+              <button onClick={handleShareExcel} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><FileSpreadsheet className="w-6 h-6 text-primary" /></div>
+                <span className="font-bold text-sm">ملف إكسل</span>
+              </button>
+              <button onClick={handleShareText} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><Type className="w-6 h-6 text-primary" /></div>
+                <span className="font-bold text-sm">نص فقط</span>
+              </button>
+            </div>
+            <button onClick={() => setShowShareModal(false)} className="w-full mt-2 p-4 rounded-xl bg-muted text-foreground font-bold hover:bg-muted/80 transition-colors active:scale-95">إلغاء</button>
+          </div>
+        </div>
+      )}
+
       {showNotes && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-end justify-center animate-fade-in" onClick={() => setShowNotes(false)}>
           <div className="bg-white w-full max-h-[85vh] rounded-t-3xl p-6 overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
@@ -277,8 +368,8 @@ const LedgerPage = () => {
                 <button onClick={() => setShowNotes(false)} className="bg-muted p-2 rounded-full"><X className="w-5 h-5"/></button>
              </div>
              <div className="relative mb-6">
-                <textarea placeholder="اكتب ملاحظة جديدة..." value={newNote} onChange={e => setNewNote(e.target.value)} className="w-full bg-muted border-none rounded-2xl p-4 text-sm font-bold min-h-[100px] outline-none" />
-                <button onClick={handleAddNote} className="absolute bottom-3 left-3 bg-[#5D4037] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md">حفظ</button>
+                <textarea id="note-input" placeholder="اكتب ملاحظة جديدة هنا..." className="w-full bg-muted border-none rounded-2xl p-4 text-sm font-bold min-h-[100px] outline-none" />
+                <button onClick={() => { const el = document.getElementById('note-input') as HTMLTextAreaElement; handleAddNote(el.value); el.value = ''; }} className="absolute bottom-3 left-3 bg-[#5D4037] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md">حفظ</button>
              </div>
              <div className="space-y-3">
                 {client?.notes?.length === 0 ? (
@@ -313,15 +404,49 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {contextMenuTx && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[110] flex items-center justify-center p-6 animate-fade-in" onClick={() => setContextMenuTx(null)}>
+      {longPressedTx && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[110] flex items-center justify-center p-6 animate-fade-in" onClick={() => setLongPressedTx(null)}>
           <Card className="w-full max-w-xs shadow-2xl rounded-3xl overflow-hidden text-right" onClick={e => e.stopPropagation()}>
-            <div className="bg-[#5D4037] p-4 text-white text-center font-black">{formatNumber(contextMenuTx.amount)}</div>
+            <div className="bg-[#5D4037] p-4 text-white text-center font-black">{formatNumber(longPressedTx.amount)}</div>
             <div className="p-3 grid grid-cols-1 gap-2 bg-card">
-              <button onClick={() => { setEditAmount((contextMenuTx.amount||0).toString()); setEditDetails(contextMenuTx.details||''); setEditDate(contextMenuTx.date||''); setEditType(contextMenuTx.type); setEditingTx(contextMenuTx); setContextMenuTx(null); }} className="flex items-center justify-end gap-3 p-3 hover:bg-muted rounded-xl font-bold"><span className="flex-1 text-right">تعديل المعاملة</span><Pencil className="w-5 h-5 text-blue-500" /></button>
-              <button onClick={() => { setShowColorPicker(true); setContextMenuTx(null); }} className="flex items-center justify-end gap-3 p-3 hover:bg-muted rounded-xl font-bold"><span className="flex-1 text-right">تلوين المعاملة</span><Palette className="w-5 h-5 text-purple-500" /></button>
-              <button onClick={async () => { await dbDeleteTransaction(contextMenuTx.id!); setContextMenuTx(null); loadData(); toast.success('تم الحذف'); }} className="flex items-center justify-end gap-3 p-3 bg-red-50 text-red-600 rounded-xl font-bold"><span className="flex-1 text-right">حذف المعاملة</span><Trash2 className="w-5 h-5" /></button>
+              <button onClick={() => { startEditTx(longPressedTx); setLongPressedTx(null); }} className="flex items-center justify-end gap-3 p-3 hover:bg-muted rounded-xl font-bold"><span className="flex-1 text-right">تعديل المعاملة</span><Pencil className="w-5 h-5 text-blue-500" /></button>
+              <button onClick={() => { setShowColorPicker(true); }} className="flex items-center justify-end gap-3 p-3 hover:bg-muted rounded-xl font-bold"><span className="flex-1 text-right">تلوين المعاملة</span><Palette className="w-5 h-5 text-purple-500" /></button>
+              <button onClick={() => { setShowDeleteConfirm(longPressedTx.id!); setLongPressedTx(null); }} className="flex items-center justify-end gap-3 p-3 bg-red-50 text-red-600 rounded-xl font-bold"><span className="flex-1 text-right">حذف المعاملة</span><Trash2 className="w-5 h-5" /></button>
             </div>
+          </Card>
+        </div>
+      )}
+
+      {showColorPicker && (
+        <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center animate-fade-in" onClick={() => setShowColorPicker(false)}>
+           <Card className="p-6 w-80 rounded-3xl shadow-2xl" onClick={e => e.stopPropagation()} dir="rtl">
+              <h4 className="text-center font-black mb-5 text-[#5D4037] text-lg">اختر لون التمييز</h4>
+              <div className="grid grid-cols-4 gap-4">
+                 {[
+                   { name: 'افتراضي', color: '' }, { name: 'أحمر', color: '#fee2e2' }, { name: 'أخضر', color: '#dcfce7' }, { name: 'أصفر', color: '#fef3c7' },
+                   { name: 'أزرق', color: '#dbeafe' }, { name: 'بنفسجي', color: '#f3e8ff' }, { name: 'برتقالي', color: '#ffedd5' }, { name: 'رمادي', color: '#f3f4f6' }
+                 ].map(c => (
+                   <button key={c.name} onClick={() => handleColorSelect(c.color)} className="flex flex-col items-center gap-2 active:scale-90 transition-transform">
+                      <div className="w-12 h-12 rounded-full border-2 border-border shadow-sm" style={{ backgroundColor: c.color || '#fff' }} />
+                      <span className="text-[10px] font-bold text-muted-foreground">{c.name}</span>
+                   </button>
+                 ))}
+              </div>
+              <button onClick={() => setShowColorPicker(false)} className="w-full mt-6 py-3 bg-muted rounded-xl font-bold hover:opacity-90">إلغاء</button>
+           </Card>
+        </div>
+      )}
+
+      {showLimitModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowLimitModal(false)}>
+          <Card className="shadow-2xl w-full max-w-xs border-0 animate-scale-in rounded-3xl overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
+            <div className="bg-[#5D4037] p-4 text-white text-center">
+               <h3 className="text-lg font-black flex items-center justify-center gap-2"><ShieldAlert className="w-5 h-5"/> سقف الحساب</h3>
+            </div>
+            <CardContent className="p-5 space-y-4 bg-card">
+              <input className="w-full border border-input rounded-xl px-4 py-3 text-left bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-[#5D4037] font-sans text-lg tracking-wider font-bold" type="number" lang="en" dir="ltr" value={newLimit} onChange={e => setNewLimit(e.target.value)} placeholder="0" />
+              <button onClick={handleSaveLimit} className="w-full bg-[#5D4037] text-white py-3 rounded-xl font-bold active:scale-95 transition-transform">حفظ السقف</button>
+            </CardContent>
           </Card>
         </div>
       )}
@@ -345,6 +470,22 @@ const LedgerPage = () => {
         </div>
       )}
       
+      {showDeleteConfirm !== null && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowDeleteConfirm(null)}>
+          <Card className="shadow-2xl w-full max-w-xs border-0 rounded-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <CardContent className="p-6 text-center space-y-4">
+              <div className="w-14 h-14 mx-auto rounded-full bg-red-100 flex items-center justify-center"><Trash2 className="w-7 h-7 text-red-600" /></div>
+              <h2 className="text-lg font-bold">حذف المعاملة</h2>
+              <p className="text-sm text-muted-foreground">هل أنت متأكد من حذف هذه المعاملة؟</p>
+              <div className="flex gap-2">
+                <button onClick={confirmDeleteTx} className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-bold">حذف</button>
+                <button onClick={() => setShowDeleteConfirm(null)} className="flex-1 bg-muted py-2.5 rounded-lg font-bold">إلغاء</button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {showDeleteAllConfirm && (
         <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowDeleteAllConfirm(false)}>
           <Card className="shadow-2xl w-full max-w-xs border-0 rounded-3xl overflow-hidden" onClick={e => e.stopPropagation()}>

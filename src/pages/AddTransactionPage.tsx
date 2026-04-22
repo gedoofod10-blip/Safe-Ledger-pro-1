@@ -31,7 +31,6 @@ const AddTransactionPage = () => {
 
   const handleSubmit = async (type: 'debit' | 'credit') => {
     if (!selectedClientId || !amount || parseFloat(amount) <= 0) return;
-    // تمت إزالة حقل notes الذي كان يسبب خطأ برمجي هنا
     await dbAddTransaction({
       clientId: selectedClientId,
       amount: parseFloat(amount),

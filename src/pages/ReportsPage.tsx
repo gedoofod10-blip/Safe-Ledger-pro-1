@@ -1,139 +1,90 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getAllClients, getAllTransactions, type Client, type Transaction } from '@/lib/db';
-import { Card, CardContent } from '@/components/ui/card';
-import { ArrowRight, Share2, FileDown, Type, Image as ImageIcon, FileSpreadsheet, ListFilter, Users, ArrowDown, ArrowUp, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Search, FileText, ArrowLeft, AlertCircle } from 'lucide-react';
 import { formatNumber } from '@/lib/utils';
 import { toast } from 'sonner';
-import { shareFileNative, shareTextNative } from '@/lib/sharing';
 
-// --- Types ---
-interface TransactionRow extends Transaction {
-  clientName: string;
-  category: string;
-}
-
-interface BalanceRow {
-  clientId: number;
-  clientName: string;
-  category: string;
+interface ReportRow {
+  id?: number;
+  name: string;
   balance: number;
+  days: number;
+  rating?: 'excellent' | 'average' | 'poor';
+  budgetLimit?: number;
+  isOverBudget?: boolean;
+  category?: string;
 }
 
 const ReportsPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const reportRef = useRef<HTMLDivElement>(null);
+  const [reportData, setReportData] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Data
-  const [transactionsData, setTransactionsData] = useState<TransactionRow[]>([]);
-  const [balancesData, setBalancesData] = useState<BalanceRow[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  
-  // Unified Swipe Views
-  const [views, setViews] = useState<string[]>(['transactions', 'الكل']);
-  const [activeViewIndex, setActiveViewIndex] = useState(0);
-
-  // Swipe logic states
-  const touchStartX = useRef<number | null>(null);
-
-  // Share Modal
-  const [showShareModal, setShowShareModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const reportType = searchParams.get('type') || 'total';
 
   useEffect(() => {
     async function fetchData() {
-      setLoading(true);
       try {
-        const clients = await getAllClients();
-        const txns = await getAllTransactions();
+        const allClients = await getAllClients();
+        const allTx = await getAllTransactions();
 
-        // 1. Prepare Transactions Data
-        const txData: TransactionRow[] = txns.map(tx => {
-          const client = clients.find(c => c.id === tx.clientId);
-          return {
-            ...tx,
-            clientName: client?.name || 'غير معروف',
-            category: client?.category || 'عام'
-          };
-        }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-        // 2. Prepare Balances Data
-        const balData: BalanceRow[] = clients.map(client => {
-          const clientTxns = txns.filter(tx => tx.clientId === client.id);
+        const processed = allClients.map(client => {
+          const clientTxns = allTx.filter(tx => tx.clientId === client.id);
           let balance = 0;
+          let lastDateStr = client.createdAt || new Date().toISOString();
+
           clientTxns.forEach(tx => {
             if (tx.type === 'debit') balance += tx.amount;
             else balance -= tx.amount;
+            if (tx.date) lastDateStr = tx.date;
           });
+
+          // دالة بديلة وآمنة عن date-fns
+          const lastDate = new Date(lastDateStr).getTime();
+          const today = new Date().getTime();
+          const diffTime = Math.abs(today - lastDate);
+          const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          const budgetLimit = client.budgetLimit || 0;
+          const isOverBudget = budgetLimit > 0 && balance > budgetLimit;
+
           return {
-            clientId: client.id!,
-            clientName: client.name,
+            id: client.id,
+            name: client.name,
+            balance,
+            days: Math.max(0, days - 1),
+            rating: client.rating,
+            budgetLimit,
+            isOverBudget,
             category: client.category || 'عام',
-            balance
           };
-        }).filter(row => row.balance !== 0)
-          .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+        }).filter(row => row.balance !== 0).sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
 
-        // 3. Extract Unique Categories & Build Views
-        const cats = Array.from(new Set(clients.map(c => c.category || 'عام')));
-        
-        setTransactionsData(txData);
-        setBalancesData(balData);
-        setCategories(cats);
-        setViews(['transactions', 'الكل', ...cats]); 
-
+        setReportData(processed);
+        setLoading(false);
       } catch (error) {
-        toast.error('حدث خطأ أثناء تحميل البيانات');
-      } finally {
+        toast.error('فشل تحميل التقرير');
         setLoading(false);
       }
     }
     fetchData();
   }, []);
 
-  const currentView = views[activeViewIndex];
+  const filteredData = searchQuery ? reportData.filter(row => row.name.includes(searchQuery)) : reportData;
+  const totalBalance = filteredData.reduce((sum, row) => sum + row.balance, 0);
 
-  const filteredBalances = currentView === 'الكل' 
-    ? balancesData 
-    : balancesData.filter(b => b.category === currentView);
-
-  // --- Swipe Logic Handlers ---
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const touchEndX = e.changedTouches[0].clientX;
-    const diff = touchStartX.current - touchEndX;
-    
-    if (diff > 50 && activeViewIndex < views.length - 1) {
-      setActiveViewIndex(prev => prev + 1);
-    } else if (diff < -50 && activeViewIndex > 0) {
-      setActiveViewIndex(prev => prev - 1);
-    }
-    
-    touchStartX.current = null;
-  };
-
-  const nextView = () => {
-    if (activeViewIndex < views.length - 1) setActiveViewIndex(prev => prev + 1);
-  };
-
-  const prevView = () => {
-    if (activeViewIndex > 0) setActiveViewIndex(prev => prev - 1);
-  };
-
-  // --- Sharing & Export Logic ---
-  const handleSharePDF = async () => {
+  const handleExportPDF = async () => {
     if (!reportRef.current) return;
     const loadingToast = toast.loading('جاري تجهيز التقرير...');
     try {
-      // تم استخدام الاستدعاء الديناميكي هنا لمنع الشاشة البيضاء
-      const module = await import('html2canvas');
-      const html2canvas = (module as any).default || (module as any);
+      // استدعاء ديناميكي لمنع الخطأ الافتتاحي
+      const html2canvasModule = await import('html2canvas');
+      const html2canvas = html2canvasModule.default || html2canvasModule;
       const jsPDFModule = await import('jspdf');
-      const jsPDF = (jsPDFModule as any).default || (jsPDFModule as any);
+      const jsPDF = jsPDFModule.default || jsPDFModule;
 
       const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
       const imgData = canvas.toDataURL('image/png');
@@ -141,258 +92,62 @@ const ReportsPage = () => {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      
-      const blob = pdf.output('blob');
-      const file = new File([blob], `تقرير_${currentView === 'transactions' ? 'المعاملات' : 'الارصدة'}.pdf`, { type: 'application/pdf' });
-      
+      pdf.save(`تقرير_${new Date().toISOString().split('T')[0]}.pdf`);
       toast.dismiss(loadingToast);
-      setShowShareModal(false);
-      await shareFileNative(file, 'تقرير PDF', 'إليك التقرير المطلوب');
+      toast.success('تم تصدير التقرير');
     } catch (error) {
       toast.dismiss(loadingToast);
-      toast.error('فشل تصدير التقرير');
-    }
-  };
-
-  const handleShareImage = async () => {
-    if (!reportRef.current) return;
-    const loadingToast = toast.loading('جاري تجهيز التقرير...');
-    try {
-      // تم استخدام الاستدعاء الديناميكي هنا لمنع الشاشة البيضاء
-      const module = await import('html2canvas');
-      const html2canvas = (module as any).default || (module as any);
-
-      const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-      canvas.toBlob(async (blob: Blob | null) => {
-        if (blob) {
-          const file = new File([blob], `تقرير_${currentView === 'transactions' ? 'المعاملات' : 'الارصدة'}.png`, { type: 'image/png' });
-          toast.dismiss(loadingToast);
-          setShowShareModal(false);
-          await shareFileNative(file, 'صورة تقرير', 'إليك التقرير المطلوب');
-        }
-      }, 'image/png');
-    } catch (error) {
-      toast.dismiss(loadingToast);
-      toast.error('فشل إنشاء الصورة');
-    }
-  };
-
-  const handleShareCSV = async () => {
-    const loadingToast = toast.loading('جاري تجهيز ملف الإكسل...');
-    try {
-      let csvContent = "\uFEFF"; 
-      
-      if (currentView === 'transactions') {
-        csvContent += "التاريخ,اسم العميل,المبلغ,النوع,التفاصيل\n";
-        transactionsData.forEach(tx => {
-          const typeStr = tx.type === 'debit' ? 'عليه' : 'له';
-          csvContent += `${tx.date},"${tx.clientName}",${tx.amount},${typeStr},"${tx.details}"\n`;
-        });
-      } else {
-        csvContent += "اسم العميل,الرصيد,الحالة,التصنيف\n";
-        filteredBalances.forEach(b => {
-          const typeStr = b.balance > 0 ? 'عليه' : 'له';
-          csvContent += `"${b.clientName}",${Math.abs(b.balance)},${typeStr},"${b.category}"\n`;
-        });
-      }
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const file = new File([blob], `تقرير_${currentView === 'transactions' ? 'المعاملات' : 'الارصدة'}.csv`, { type: 'text/csv' });
-      
-      toast.dismiss(loadingToast);
-      setShowShareModal(false);
-      await shareFileNative(file, 'ملف إكسل (CSV)', 'إليك التقرير كملف إكسل');
-    } catch (error) {
-      toast.dismiss(loadingToast);
-      toast.error('فشل تصدير الإكسل');
-    }
-  };
-
-  const handleShareText = async () => {
-    try {
-      let text = `📄 تقرير ${currentView === 'transactions' ? 'سجل المعاملات' : `أرصدة التصنيفات (${currentView})`}\n`;
-      text += `📅 التاريخ: ${new Date().toISOString().split('T')[0]}\n\n`;
-
-      if (currentView === 'transactions') {
-        transactionsData.forEach(tx => {
-          text += `▪ ${tx.date} | ${tx.clientName}\n`;
-          text += `المبلغ: ${tx.amount} (${tx.type === 'debit' ? 'عليه' : 'له'}) - ${tx.details}\n`;
-          text += `-----------------\n`;
-        });
-      } else {
-        filteredBalances.forEach(b => {
-          text += `▪ ${b.clientName}: ${formatNumber(Math.abs(b.balance))} (${b.balance > 0 ? 'عليه' : 'له'})\n`;
-        });
-      }
-
-      setShowShareModal(false);
-      await shareTextNative('مشاركة التقرير', text);
-    } catch (error) {
-      toast.error('فشل مشاركة النص');
+      toast.error('فشل التصدير');
     }
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col overflow-x-hidden" dir="rtl">
-      {/* --- HEADER --- */}
-      <div className="bg-header text-header flex items-center justify-between p-4 shadow-md sticky top-0 z-40">
+    <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+      <div className="bg-[#5D4037] text-white flex items-center justify-between p-4 shadow-lg sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-1 hover:bg-white/20 rounded-full transition-colors">
-            <ArrowRight className="w-6 h-6" />
-          </button>
-          <h1 className="text-xl font-bold">التقارير</h1>
+          <button onClick={() => navigate(-1)} className="p-1"><ArrowLeft className="w-6 h-6" /></button>
+          <h1 className="text-lg font-bold">التقارير</h1>
         </div>
-        <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors active:scale-95">
-          <Share2 className="w-5 h-5" />
-          <span className="text-sm font-bold">تصدير</span>
-        </button>
+        <button onClick={handleExportPDF} className="p-2 bg-white/20 rounded-lg"><FileText className="w-5 h-5" /></button>
       </div>
 
-      {/* --- DOTS INDICATOR & NAVIGATION --- */}
-      <div className="bg-card border-b border-border p-3 flex flex-col items-center justify-center shadow-sm">
-        <div className="w-full flex items-center justify-between mb-2 px-2">
-           <button onClick={prevView} disabled={activeViewIndex === 0} className="p-2 bg-muted rounded-full disabled:opacity-20 active:scale-90 transition-all"><ChevronRight className="w-5 h-5"/></button>
-           
-           <div className="flex flex-col items-center animate-fade-in" key={currentView}>
-             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-0.5">نوع التقرير</span>
-             <h2 className="text-base font-black text-primary">
-               {currentView === 'transactions' ? 'سجل المعاملات الشامل' : `أرصدة التصنيفات (${currentView})`}
-             </h2>
-           </div>
+      <div className="bg-card border-b border-border p-3">
+        <input type="text" placeholder="ابحث عن عميل..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-background border border-input rounded-lg px-4 py-2.5 text-right text-foreground focus:outline-none focus:ring-2 focus:ring-[#5D4037]" />
+      </div>
 
-           <button onClick={nextView} disabled={activeViewIndex === views.length - 1} className="p-2 bg-muted rounded-full disabled:opacity-20 active:scale-90 transition-all"><ChevronLeft className="w-5 h-5"/></button>
+      <div className="grid grid-cols-2 gap-3 p-3 bg-background">
+        <div className="bg-card border border-border rounded-lg p-4 text-center">
+          <div className="text-xs text-muted-foreground mb-1">الرصيد الإجمالي</div>
+          <div className={`text-2xl font-bold ${totalBalance >= 0 ? 'text-red-500' : 'text-green-500'}`} dir="ltr">{formatNumber(Math.abs(totalBalance))}</div>
         </div>
-
-        {/* Dots */}
-        <div className="flex gap-1.5 mt-1">
-          {views.map((v, i) => (
-            <div key={v} className={`h-1.5 rounded-full transition-all duration-300 ${i === activeViewIndex ? 'w-6 bg-primary shadow-sm' : 'w-2 bg-muted-foreground/30'}`} />
-          ))}
+        <div className="bg-card border border-border rounded-lg p-4 text-center">
+          <div className="text-xs text-muted-foreground mb-1">عدد الحسابات</div>
+          <div className="text-2xl font-bold text-foreground">{filteredData.length}</div>
         </div>
       </div>
 
-      {/* --- REPORT CONTENT (Swipeable Container) --- */}
-      <div 
-        className="flex-1 bg-background p-3 pb-24"
-        onTouchStart={handleTouchStart} 
-        onTouchEnd={handleTouchEnd}
-      >
-        <div ref={reportRef} className="animate-slide-up" key={currentView}>
-          
-          <div className="hidden print-header text-center mb-4 pb-2 border-b-2 border-primary">
-            <h2 className="text-xl font-black text-foreground">
-              {currentView === 'transactions' ? 'سجل المعاملات الشامل' : `تقرير أرصدة التصنيفات (${currentView})`}
-            </h2>
-            <p className="text-sm text-muted-foreground">تاريخ الإصدار: {new Date().toISOString().split('T')[0]}</p>
-          </div>
-
-          <Card className="shadow-lg border-0 overflow-hidden rounded-2xl">
-            <CardContent className="p-0">
-              {loading ? (
-                <div className="p-10 text-center font-bold text-muted-foreground">جاري تحميل التقرير...</div>
-              ) : (
-                <>
-                  {/* 1. Transactions View */}
-                  {currentView === 'transactions' && (
-                    <>
-                      <div className="bg-table-header text-table-header grid grid-cols-[80px_1fr_80px_1.5fr] text-center text-[12px] font-extrabold py-3 px-2 border-b border-border/50 sticky top-0 shadow-sm">
-                        <div className="text-right pr-2">التاريخ</div>
-                        <div className="text-right">العميل</div>
-                        <div>المبلغ</div>
-                        <div className="text-right">التفاصيل</div>
-                      </div>
-                      <div className="divide-y divide-border/40 select-none">
-                        {transactionsData.length === 0 ? (
-                          <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-2">
-                             <ListFilter className="w-10 h-10 opacity-20 mb-2" />
-                             <span className="font-bold">لا توجد معاملات مسجلة</span>
-                             <span className="text-xs">اسحب لليمين أو اليسار للتنقل للتقارير الأخرى</span>
-                          </div>
-                        ) : (
-                          transactionsData.map((tx, idx) => (
-                            <div key={idx} className={`grid grid-cols-[80px_1fr_80px_1.5fr] py-3 px-2 items-center ${idx % 2 === 0 ? 'bg-white' : 'bg-muted/5'}`}>
-                              <div className="text-right text-[10px] font-bold text-muted-foreground pr-1">{tx.date}</div>
-                              <div className="text-right text-xs font-bold text-foreground truncate pl-2">{tx.clientName}</div>
-                              <div className="flex items-center justify-center gap-0.5 font-black text-xs">
-                                {tx.type === 'debit' ? <ArrowDown className="w-3 h-3 text-debit"/> : <ArrowUp className="w-3 h-3 text-credit"/>}
-                                <span className={tx.type === 'debit' ? 'text-debit' : 'text-credit'} dir="ltr">{formatNumber(tx.amount)}</span>
-                              </div>
-                              <div className="text-right text-[11px] font-bold text-foreground break-words leading-tight">{tx.details}</div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                  {/* 2. Balances View */}
-                  {currentView !== 'transactions' && (
-                    <>
-                      <div className="bg-table-header text-table-header flex justify-between text-[13px] font-extrabold py-3 px-5 border-b border-border/50 sticky top-0 shadow-sm">
-                        <div className="text-right">اسم العميل</div>
-                        <div className="text-left">الرصيد النهائي</div>
-                      </div>
-                      <div className="divide-y divide-border/40 select-none">
-                        {filteredBalances.length === 0 ? (
-                          <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-2">
-                             <Users className="w-10 h-10 opacity-20 mb-2" />
-                             <span className="font-bold">لا توجد أرصدة مسجلة في هذا التصنيف</span>
-                             <span className="text-xs">اسحب لليمين أو اليسار للتنقل</span>
-                          </div>
-                        ) : (
-                          filteredBalances.map((b, idx) => (
-                            <div key={idx} className={`flex justify-between py-4 px-5 items-center ${idx % 2 === 0 ? 'bg-white' : 'bg-muted/5'}`}>
-                              <div className="text-right text-sm font-bold text-foreground">{b.clientName}</div>
-                              <div className="text-left flex items-center gap-1.5 font-black text-sm">
-                                {b.balance > 0 ? <ArrowDown className="w-4 h-4 text-debit"/> : <ArrowUp className="w-4 h-4 text-credit"/>}
-                                <span className="text-foreground" dir="ltr">{formatNumber(Math.abs(b.balance))}</span>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
+      <div ref={reportRef} className="flex-1 bg-white">
+        <div className="bg-gray-100 text-gray-700 grid grid-cols-[2fr_1.5fr_1fr] text-center text-sm font-bold py-3 px-2 sticky top-0">
+          <span className="text-right">اسم العميل</span>
+          <span>الرصيد</span>
+          <span>الأيام</span>
+        </div>
+        <div className="divide-y max-h-[calc(100vh-300px)] overflow-y-auto">
+          {loading ? (
+             <div className="p-10 text-center font-bold">جاري التحميل...</div>
+          ) : filteredData.length === 0 ? (
+             <div className="p-10 text-center text-gray-400"><AlertCircle className="w-12 h-12 mx-auto mb-2 opacity-50"/>لا توجد بيانات</div>
+          ) : (
+            filteredData.map((row, index) => (
+              <div key={row.id || index} className="grid grid-cols-[2fr_1.5fr_1fr] text-center py-4 px-2 items-center bg-white">
+                <div className="text-right font-bold text-gray-800 truncate pr-2">{row.name}</div>
+                <div className={`font-black ${row.balance >= 0 ? 'text-red-600' : 'text-green-600'}`} dir="ltr">{formatNumber(row.balance)}</div>
+                <div className={`font-bold ${row.days > 30 ? 'text-red-600' : row.days > 15 ? 'text-yellow-600' : 'text-green-600'}`}>{row.days}</div>
+              </div>
+            ))
+          )}
         </div>
       </div>
-
-      {/* --- SHARE MODAL --- */}
-      {showShareModal && (
-        <div className="fixed inset-0 bg-foreground/50 backdrop-blur-sm z-[100] flex items-end justify-center animate-fade-in" onClick={() => setShowShareModal(false)}>
-          <div className="bg-card w-full rounded-t-3xl p-6 space-y-5 animate-slide-up shadow-2xl border-t border-border" onClick={e => e.stopPropagation()}>
-            <div className="w-12 h-1.5 bg-muted mx-auto rounded-full mb-2" />
-            <div className="text-center">
-              <h3 className="text-xl font-extrabold text-foreground">مشاركة التقرير</h3>
-              <p className="text-xs text-muted-foreground mt-1 font-bold">عبر قائمة الهاتف المباشرة</p>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4 mt-4">
-              <button onClick={handleSharePDF} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><FileDown className="w-6 h-6 text-primary" /></div>
-                <span className="font-bold text-sm">ملف PDF</span>
-              </button>
-              <button onClick={handleShareImage} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><ImageIcon className="w-6 h-6 text-primary" /></div>
-                <span className="font-bold text-sm">صورة تقرير</span>
-              </button>
-              <button onClick={handleShareCSV} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><FileSpreadsheet className="w-6 h-6 text-primary" /></div>
-                <span className="font-bold text-sm">ملف إكسل</span>
-              </button>
-              <button onClick={handleShareText} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all group active:scale-95">
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center transition-transform"><Type className="w-6 h-6 text-primary" /></div>
-                <span className="font-bold text-sm">نص فقط</span>
-              </button>
-            </div>
-            
-            <button onClick={() => setShowShareModal(false)} className="w-full mt-2 p-4 rounded-xl bg-muted text-foreground font-bold hover:bg-muted/80 transition-colors active:scale-95">إلغاء</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

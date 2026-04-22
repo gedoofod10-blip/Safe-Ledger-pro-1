@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getAllClients, getAllTransactions, type Client, type Transaction } from '@/lib/db';
+import { getAllClients, getAllTransactions } from '@/lib/db';
 import { Search, FileText, ArrowLeft, AlertCircle } from 'lucide-react';
 import { formatNumber } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -42,11 +42,11 @@ const ReportsPage = () => {
             if (tx.date) lastDateStr = tx.date;
           });
 
-          // دالة بديلة وآمنة عن date-fns
+          // الحل الجذري والآمن بدلاً من مكتبة date-fns المفقودة
           const lastDate = new Date(lastDateStr).getTime();
           const today = new Date().getTime();
           const diffTime = Math.abs(today - lastDate);
-          const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          const days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
           const budgetLimit = client.budgetLimit || 0;
           const isOverBudget = budgetLimit > 0 && balance > budgetLimit;
@@ -55,7 +55,7 @@ const ReportsPage = () => {
             id: client.id,
             name: client.name,
             balance,
-            days: Math.max(0, days - 1),
+            days: Math.max(0, days),
             rating: client.rating,
             budgetLimit,
             isOverBudget,
@@ -80,7 +80,6 @@ const ReportsPage = () => {
     if (!reportRef.current) return;
     const loadingToast = toast.loading('جاري تجهيز التقرير...');
     try {
-      // استدعاء ديناميكي لمنع الخطأ الافتتاحي
       const html2canvasModule = await import('html2canvas');
       const html2canvas = html2canvasModule.default || html2canvasModule;
       const jsPDFModule = await import('jspdf');
@@ -141,7 +140,7 @@ const ReportsPage = () => {
             filteredData.map((row, index) => (
               <div key={row.id || index} className="grid grid-cols-[2fr_1.5fr_1fr] text-center py-4 px-2 items-center bg-white">
                 <div className="text-right font-bold text-gray-800 truncate pr-2">{row.name}</div>
-                <div className={`font-black ${row.balance >= 0 ? 'text-red-600' : 'text-green-600'}`} dir="ltr">{formatNumber(row.balance)}</div>
+                <div className={`font-black tracking-tight ${row.balance >= 0 ? 'text-red-600' : 'text-green-600'}`} dir="ltr">{formatNumber(row.balance)}</div>
                 <div className={`font-bold ${row.days > 30 ? 'text-red-600' : row.days > 15 ? 'text-yellow-600' : 'text-green-600'}`}>{row.days}</div>
               </div>
             ))

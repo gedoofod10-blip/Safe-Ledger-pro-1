@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getAllClients, updateClient } from '@/lib/db';
 import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { ArrowRight, Plus, Pencil, Trash2, X, Share2, Download, Save, Settings2, Lock, Layers, Database, MoreVertical } from 'lucide-react';
+import { ArrowRight, Plus, Pencil, Trash2, X, Share2, Download, Database } from 'lucide-react';
 import { downloadBackup, shareBackup, importBackup } from '@/lib/backup';
 
 const SettingsPage = () => {
@@ -137,23 +137,23 @@ const SettingsPage = () => {
 
   const handleLongPressEnd = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
 
-  const handleDownloadFile = async () => {
-    const loadingToast = toast.loading('جاري تجهيز وتنزيل ملف JSON...');
+  // دالة تصدير ومشاركة النسخة المدمجة
+  const handleExportAndShare = async () => {
+    const loadingToast = toast.loading('جاري تجهيز النسخة الاحتياطية...');
     try {
-      await downloadBackup(); 
-      toast.dismiss(loadingToast);
-    } catch (error) {
-      toast.dismiss(loadingToast);
-    }
-  };
-
-  const handleShareNative = async () => {
-    const loadingToast = toast.loading('جاري فتح قائمة المشاركة...');
-    try {
+      // محاولة فتح قائمة المشاركة الفعلية في الهاتف
       await shareBackup(); 
       toast.dismiss(loadingToast);
     } catch (error) {
-      toast.dismiss(loadingToast);
+      // في حال فشلت المشاركة (جهاز لا يدعم)، يتم تنزيل الملف مباشرة
+      try {
+        await downloadBackup();
+        toast.dismiss(loadingToast);
+        toast.success('تم تنزيل الملف في جهازك بنجاح');
+      } catch (err) {
+        toast.dismiss(loadingToast);
+        toast.error('حدث خطأ أثناء تصدير البيانات');
+      }
     }
   };
 
@@ -166,10 +166,10 @@ const SettingsPage = () => {
       const result = await importBackup(file);
       toast.dismiss(loadingToast);
       toast.success(`تم استرجاع ${result.clients} عميل و ${result.transactions} معاملة بنجاح ✓`);
-      setTimeout(() => { window.location.reload(); }, 1000);
+      setTimeout(() => { window.location.reload(); }, 1500);
     } catch (error) {
       toast.dismiss(loadingToast);
-      toast.error('فشل في استرجاع البيانات. تأكد من اختيار ملف نسخة احتياطية (JSON) صحيح.');
+      toast.error('فشل الاسترجاع. تأكد من اختيار ملف نسخة احتياطية (JSON) صحيح.');
     }
     e.target.value = '';
   };
@@ -356,7 +356,7 @@ const SettingsPage = () => {
         </div>
       )}
 
-      {/* Modal: النسخ الاحتياطية */}
+      {/* Modal: النسخ الاحتياطية (التصميم الجديد) */}
       {activeModal === 'backup' && (
         <div className="fixed inset-0 bg-white z-50 flex flex-col animate-in slide-in-from-left duration-200">
           <div className="bg-header text-header p-4 flex items-center shadow-md">
@@ -364,57 +364,36 @@ const SettingsPage = () => {
             <h2 className="font-bold text-lg">النسخ الاحتياطية</h2>
           </div>
           
-          <div className="p-5 space-y-6 overflow-y-auto">
-            <div className="flex justify-between items-center pb-4 border-b">
-              <div>
-                <p className="font-bold text-gray-800">حفظ البيانات يومياً</p>
-                <p className="text-xs text-gray-500 mt-1">حفظ تلقائي للنسخة الاحتياطية في التطبيق</p>
-              </div>
-              <button onClick={()=>toggle('dailyBackup')} className={`w-12 h-6 rounded-full transition-colors relative ${settings.dailyBackup?'bg-header':'bg-gray-300'}`}>
-                <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all ${settings.dailyBackup ? 'left-0.5' : 'right-0.5'}`} />
-              </button>
+          <div className="p-6 space-y-8 overflow-y-auto flex-1 flex flex-col justify-center">
+            <div className="text-center space-y-2 mb-4">
+               <div className="w-20 h-20 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                  <Database className="w-10 h-10" />
+               </div>
+               <h3 className="text-2xl font-black text-gray-800">أمان بياناتك</h3>
+               <p className="text-sm text-gray-500 font-bold leading-relaxed">احتفظ بنسخة من بياناتك في مكان آمن، أو استعد بياناتك السابقة بضغطة زر لضمان عدم ضياعها أبداً.</p>
             </div>
 
-            <div className="space-y-4 pb-5 border-b">
-              <div>
-                <p className="font-bold text-gray-800 text-lg">تصدير النسخة الاحتياطية</p>
-                <p className="text-sm text-gray-500 mt-1 leading-relaxed">
-                  احفظ بياناتك كملف نصي (JSON) لضمان عدم ضياعها في حال مسح التطبيق.
-                </p>
-              </div>
-              <div className="flex gap-3">
+            <div className="space-y-5">
+                {/* زر التصدير والمشاركة */}
                 <button
-                  onClick={handleDownloadFile}
-                  className="flex-1 bg-header text-header font-bold py-3.5 rounded-xl transition-all flex justify-center items-center gap-2 shadow-md active:scale-95"
+                  onClick={handleExportAndShare}
+                  className="w-full bg-[#5D4037] text-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex flex-col items-center gap-3 active:scale-95 transition-transform"
                 >
-                  <Download className="w-5 h-5" />
-                  تنزيل النسخة
+                  <Share2 className="w-8 h-8" />
+                  <span className="text-xl font-black">حفظ ومشاركة النسخة</span>
+                  <span className="text-xs opacity-80 text-center font-semibold mt-1">يتم إنشاء ملف كامل لجميع البيانات يمكنك حفظه في الهاتف أو إرساله للواتساب</span>
                 </button>
-                <button
-                  onClick={handleShareNative}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-header font-bold py-3.5 rounded-xl transition-all flex justify-center items-center gap-2 border border-gray-200 shadow-sm active:scale-95"
-                >
-                  <Share2 className="w-5 h-5" />
-                  مشاركة
-                </button>
-              </div>
-            </div>
 
-            <div className="space-y-3">
-              <div>
-                <p className="font-bold text-gray-800">استرجاع قاعدة البيانات</p>
-                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                  قم برفع ملف النسخة الاحتياطية (.json) لاستعادة حساباتك السابقة.
-                </p>
-              </div>
-              <input type="file" ref={fileInputRef} className="hidden" accept=".json,.txt,.bak" onChange={handleRestoreFile} />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full bg-white hover:bg-gray-50 text-header font-bold py-3.5 px-4 rounded-xl transition-all flex items-center justify-center gap-3 border-2 border-dashed border-header/40 active:scale-95"
-              >
-                <Download className="w-5 h-5" />
-                رفع ملف الاسترجاع
-              </button>
+                {/* زر الاستيراد */}
+                <input type="file" ref={fileInputRef} className="hidden" accept=".json,.txt,.bak" onChange={handleRestoreFile} />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full bg-white border-2 border-dashed border-[#5D4037]/40 text-[#5D4037] p-6 rounded-3xl shadow-sm flex flex-col items-center gap-3 active:scale-95 transition-transform hover:bg-[#5D4037]/5"
+                >
+                  <Download className="w-8 h-8" />
+                  <span className="text-xl font-black">استعادة نسخة سابقة</span>
+                  <span className="text-xs text-gray-500 text-center font-semibold mt-1">اختر ملف النسخة الاحتياطية من الجهاز أو الدرايف لاستعادة حساباتك</span>
+                </button>
             </div>
           </div>
         </div>

@@ -201,36 +201,118 @@ const LedgerPage = () => {
     toast.success('تم تحديث التقييم');
   };
 
-  // التصدير
+// --- دوال المشاركة الآمنة للهواتف (استبدل القديمة بهذه) ---
+  
+  const safeShareFile = async (file: File) => {
+    try {
+      // فحص دعم الهاتف لقائمة المشاركة الفعلية
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'مشاركة كشف الحساب',
+        });
+      } else {
+        // تنزيل مباشر آمن إذا كان الهاتف لا يدعم القائمة
+        const url = URL.createObjectURL(file);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success('تم تنزيل الملف في جهازك بنجاح');
+      }
+    } catch (error: any) {
+      // تجاهل الخطأ إذا تراجع المستخدم وأغلق القائمة بنفسه
+      if (error.name !== 'AbortError') {
+        toast.error('حدث خطأ أثناء محاولة المشاركة');
+      }
+    }
+    setShowShareModal(false);
+  };
+
   const handleSharePDF = async () => {
     if (!client) return;
-    toast.info('جاري تجهيز ملف PDF...');
+    const t = toast.loading('جاري تجهيز ملف PDF...');
     try {
       const blob = await exportLedgerPDF(client, transactions, totalDebit, totalCredit, netBalance);
-      await shareFileNative(new File([blob], `كشف_حساب_${client.name}.pdf`, { type: 'application/pdf' }), 'كشف حساب', '');
-    } catch (e) { toast.error('خطأ أثناء التصدير'); }
-    setShowShareModal(false);
+      const file = new File([blob], `كشف_حساب_${client.name}.pdf`, { type: 'application/pdf' });
+      toast.dismiss(t);
+      await safeShareFile(file);
+    } catch (e) { 
+      toast.dismiss(t);
+      toast.error('حدث خطأ أثناء تجهيز ملف PDF'); 
+      setShowShareModal(false);
+    }
   };
+
   const handleShareImage = async () => {
-    toast.info('جاري تجهيز الصورة...');
+    const t = toast.loading('جاري التقاط الصورة...');
     try {
       const element = document.getElementById('ledger-content-to-capture');
-      if (!element) return;
+      if (!element) throw new Error('Element not found');
+      
+      // استدعاء ديناميكي لمنع الشاشة البيضاء عند فتح الصفحة
+      const html2canvasModule = await import('html2canvas');
+      const html2canvas = html2canvasModule.default || html2canvasModule;
+      
       const canvas = await html2canvas(element, { useCORS: true, scale: 2, backgroundColor: '#ffffff' });
       canvas.toBlob(async (blob) => {
-        if (blob) await shareFileNative(new File([blob], `كشف_${client?.name}.png`, { type: 'image/png' }), 'صورة كشف', '');
-      });
-    } catch (e) { toast.error('فشل إنشاء الصورة'); }
-    setShowShareModal(false);
+        toast.dismiss(t);
+        if (blob) {
+          const file = new File([blob], `كشف_حساب_${client?.name}.png`, { type: 'image/png' });
+          await safeShareFile(file);
+        } else {
+          toast.error('فشل إنشاء الصورة');
+          setShowShareModal(false);
+        }
+      }, 'image/png');
+    } catch (e) { 
+      toast.dismiss(t);
+      toast.error('حدث خطأ أثناء التقاط الصورة'); 
+      setShowShareModal(false);
+    }
   };
+
   const handleShareExcel = async () => {
     if (!client) return;
+    const t = toast.loading('جاري تجهيز ملف الإكسل...');
     try {
       const file = await generateExcelFile(client, transactions);
-      await shareFileNative(file, 'إكسل', '');
-    } catch (e) { toast.error('خطأ بالتصدير'); }
+      toast.dismiss(t);
+      await safeShareFile(file);
+    } catch (e) { 
+      toast.dismiss(t);
+      toast.error('حدث خطأ أثناء تجهيز الإكسل'); 
+      setShowShareModal(false);
+    }
+  };
+
+  const handleShareText = async () => {
+    if (!client) return;
+    try {
+      // توليد النص داخلياً لتجنب أعطال الملفات الخارجية
+      let text = `📄 كشف حساب: ${client.name}\n`;
+      text += `📅 التاريخ: ${new Date().toISOString().split('T')[0]}\n\n`;
+      text += `الرصيد النهائي: ${formatNumber(Math.abs(netBalance))} ${netBalance >= 0 ? 'عليه' : 'له'}\n\n`;
+      text += `--- تفاصيل المعاملات ---\n`;
+      transactions.forEach(tx => {
+        text += `▪ ${tx.date} | ${formatNumber(tx.amount)} ${tx.type === 'debit' ? 'عليه' : 'له'}\n  البيان: ${tx.details}\n`;
+      });
+      
+      if (navigator.share) {
+        await navigator.share({ title: `كشف حساب ${client.name}`, text: text });
+      } else {
+        await navigator.clipboard.writeText(text);
+        toast.success('تم نسخ النص للحافظة بنجاح');
+      }
+    } catch (e: any) { 
+      if (e.name !== 'AbortError') toast.error('خطأ في مشاركة النص');
+    }
     setShowShareModal(false);
   };
+  // ------------------------------------------------------------------
 
   return (
     <div className="min-h-screen bg-background pb-28 flex flex-col overflow-x-hidden" dir="rtl">

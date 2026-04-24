@@ -394,14 +394,18 @@ const LedgerPage = () => {
                       </span>
                     </div>
                     
-                    <div className="text-left flex items-center justify-end gap-1 font-black text-[12px] w-full pr-1 tracking-tighter" dir="ltr">
+                    <div className="text-left flex items-center justify-end gap-1.5 font-black text-[12px] w-full pr-1 tracking-tighter" dir="ltr">
                       <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
                       
-                      {/* هنا استخدمنا الرموز النصية الجاهزة لمثلث نقي 100% بدون أي مربعات */}
+                      {/* هرم هندسي نقي لا يتأثر بإيموجي الهاتف أبداً، بلون أحمر للأسفل وأخضر للأعلى */}
                       {tx.balance >= 0 ? (
-                        <span className="text-red-600 text-[10px] leading-none">▼</span>
+                        <svg width="9" height="9" viewBox="0 0 24 24" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
+                          <path d="M12 21L0 3h24z" />
+                        </svg>
                       ) : (
-                        <span className="text-green-600 text-[10px] leading-none">▲</span>
+                        <svg width="9" height="9" viewBox="0 0 24 24" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
+                          <path d="M12 3l12 18H0z" />
+                        </svg>
                       )}
                     </div>
                   </div>

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getAllClients, updateClient } from '@/lib/db';
 import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { ArrowRight, Plus, Pencil, Trash2, X, Share2, Download, Database } from 'lucide-react';
+import { ArrowRight, Plus, Pencil, Trash2, X, Share2, Download, Database, Image as ImageIcon } from 'lucide-react';
 import { downloadBackup, shareBackup, importBackup } from '@/lib/backup';
 
 const SettingsPage = () => {
@@ -14,7 +14,10 @@ const SettingsPage = () => {
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem('appSettings');
     const defaultSettings = {
-      shopName: 'الإسم', shopAddress: 'العنوان', shopPhone: 'رقم التلفون',
+      shopName: localStorage.getItem('shopName') || 'الإسم', 
+      shopAddress: localStorage.getItem('shopAddress') || 'العنوان', 
+      shopPhone: localStorage.getItem('shopPhone') || 'رقم التلفون',
+      shopLogo: localStorage.getItem('shopLogo') || '',
       printInfo: true, showDate: true, printAsc: true,
       waInsteadSms: false, dailyBackup: true,
       requirePassword: false, appPassword: ''
@@ -33,6 +36,11 @@ const SettingsPage = () => {
 
   useEffect(() => {
     localStorage.setItem('appSettings', JSON.stringify(settings));
+    // حفظ البيانات الشخصية بشكل مستقل لتسهيل وصول ملفات التصدير إليها
+    localStorage.setItem('shopName', settings.shopName);
+    localStorage.setItem('shopAddress', settings.shopAddress);
+    localStorage.setItem('shopPhone', settings.shopPhone);
+    if (settings.shopLogo) localStorage.setItem('shopLogo', settings.shopLogo);
   }, [settings]);
 
   const loadCategoriesData = async () => {
@@ -137,15 +145,12 @@ const SettingsPage = () => {
 
   const handleLongPressEnd = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
 
-  // دالة تصدير ومشاركة النسخة المدمجة
   const handleExportAndShare = async () => {
     const loadingToast = toast.loading('جاري تجهيز النسخة الاحتياطية...');
     try {
-      // محاولة فتح قائمة المشاركة الفعلية في الهاتف
       await shareBackup(); 
       toast.dismiss(loadingToast);
     } catch (error) {
-      // في حال فشلت المشاركة (جهاز لا يدعم)، يتم تنزيل الملف مباشرة
       try {
         await downloadBackup();
         toast.dismiss(loadingToast);
@@ -190,7 +195,6 @@ const SettingsPage = () => {
         <h1 className="text-xl font-bold">الإعدادات</h1>
       </div>
 
-      {/* شبكة الإعدادات - مربعات متناسقة */}
       <div className="flex-1 p-4">
         <div className="grid grid-cols-2 gap-4 auto-rows-max">
           {settingsMenuItems.map((item) => (
@@ -209,20 +213,87 @@ const SettingsPage = () => {
       {/* Modal: البيانات الشخصية */}
       {activeModal === 'personal' && (
         <div className="fixed inset-0 bg-white z-50 flex flex-col animate-in slide-in-from-left duration-200">
-          <div className="bg-header text-header p-4 flex items-center">
+          <div className="bg-[#5D4037] text-white p-4 flex items-center shadow-md">
             <button onClick={() => setActiveModal(null)} className="ml-4"><ArrowRight/></button>
-            <h2 className="font-bold">البيانات الشخصية</h2>
+            <h2 className="font-bold">البيانات الشخصية والشعار</h2>
           </div>
-          <div className="p-4 space-y-6 overflow-y-auto">
-            <div className="text-center py-4">
-              <div className="w-20 h-20 bg-header text-header rounded-full mx-auto flex items-center justify-center text-3xl font-bold">$</div>
+          <div className="p-6 space-y-6 overflow-y-auto flex-1">
+            {/* رفع الشعار */}
+            <div className="flex flex-col items-center gap-4 py-4 border-b border-dashed border-gray-200">
+              <div className="relative group">
+                <div className="w-32 h-32 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden shadow-inner">
+                  {settings.shopLogo ? (
+                    <img src={settings.shopLogo} className="w-full h-full object-contain" />
+                  ) : (
+                    <ImageIcon className="w-10 h-10 text-gray-300" />
+                  )}
+                </div>
+                <input 
+                  type="file" 
+                  id="logo-upload" 
+                  className="hidden" 
+                  accept="image/*" 
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (readerEvent) => {
+                        const base64 = readerEvent.target?.result as string;
+                        setSettings({...settings, shopLogo: base64});
+                        localStorage.setItem('shopLogo', base64);
+                        toast.success('تم حفظ الشعار بنجاح');
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }} 
+                />
+                <label 
+                  htmlFor="logo-upload" 
+                  className="absolute -bottom-2 -right-2 bg-[#5D4037] text-white p-2.5 rounded-full shadow-lg cursor-pointer active:scale-90 transition-transform"
+                >
+                  <Plus className="w-5 h-5" />
+                </label>
+              </div>
+              <p className="text-xs font-bold text-muted-foreground text-center">أضف شعار المؤسسة ليظهر أعلى كشوفات الحساب</p>
             </div>
-            <div className="space-y-4">
-              <div className="border-b pb-2"><label className="text-xs text-gray-400">الإسم</label><input className="w-full font-bold outline-none" value={settings.shopName} onChange={e=>setSettings({...settings, shopName: e.target.value})}/></div>
-              <div className="border-b pb-2"><label className="text-xs text-gray-400">العنوان</label><input className="w-full font-bold outline-none" value={settings.shopAddress} onChange={e=>setSettings({...settings, shopAddress: e.target.value})}/></div>
-              <div className="border-b pb-2"><label className="text-xs text-gray-400">رقم التلفون</label><input className="w-full font-bold outline-none" value={settings.shopPhone} onChange={e=>setSettings({...settings, shopPhone: e.target.value})}/></div>
+
+            <div className="space-y-5">
+              <div className="space-y-1">
+                <label className="text-xs font-black text-[#5D4037] pr-1">اسم المؤسسة / النشاط</label>
+                <input 
+                  className="w-full bg-muted/50 border-b-2 border-[#5D4037] p-3 font-bold outline-none rounded-t-lg text-right" 
+                  value={settings.shopName} 
+                  onChange={e => setSettings({...settings, shopName: e.target.value})}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-black text-[#5D4037] pr-1">العنوان</label>
+                <input 
+                  className="w-full bg-muted/50 border-b-2 border-[#5D4037] p-3 font-bold outline-none rounded-t-lg text-right" 
+                  value={settings.shopAddress} 
+                  onChange={e => setSettings({...settings, shopAddress: e.target.value})}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-black text-[#5D4037] pr-1">رقم الهاتف</label>
+                <input 
+                  className="w-full bg-muted/50 border-b-2 border-[#5D4037] p-3 font-bold outline-none rounded-t-lg text-left" 
+                  dir="ltr"
+                  value={settings.shopPhone} 
+                  onChange={e => setSettings({...settings, shopPhone: e.target.value})}
+                />
+              </div>
             </div>
-            <button onClick={() => {toast.success('تم حفظ البيانات بنجاح ✓'); setActiveModal(null);}} className="w-full bg-header text-header py-3 rounded-lg font-bold">حفظ</button>
+            
+            <button 
+              onClick={() => {
+                toast.success('تم حفظ البيانات ومزامنتها بنجاح ✓');
+                setActiveModal(null);
+              }} 
+              className="w-full bg-[#5D4037] text-white py-4 rounded-xl font-bold shadow-lg mt-4 active:scale-95 transition-transform"
+            >
+              حفظ الإعدادات
+            </button>
           </div>
         </div>
       )}
@@ -255,36 +326,15 @@ const SettingsPage = () => {
                 <p className="font-bold flex items-center gap-2">تفعيل كلمة السر</p>
                 <p className="text-xs text-gray-500">طلب كلمة السر عند الدخول</p>
               </div>
-              <button 
-                onClick={() => toggle('requirePassword')} 
-                className={`w-12 h-6 rounded-full transition-colors relative ${settings.requirePassword ? 'bg-header' : 'bg-gray-300'}`}
-              >
+              <button onClick={() => toggle('requirePassword')} className={`w-12 h-6 rounded-full transition-colors relative ${settings.requirePassword ? 'bg-header' : 'bg-gray-300'}`}>
                 <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all ${settings.requirePassword ? 'left-0.5' : 'right-0.5'}`} />
               </button>
             </div>
-
             {settings.requirePassword && (
               <div className="p-4 space-y-4 animate-in fade-in duration-300 bg-gray-50">
-                <div>
-                  <p className="font-bold flex items-center gap-2">كلمة السر</p>
-                </div>
-                <input 
-                  type="text" 
-                  className="w-full border p-3 rounded-lg outline-none focus:border-header text-center font-bold tracking-widest text-lg shadow-sm" 
-                  placeholder="أدخل كلمة السر هنا..." 
-                  value={settings.appPassword || ''} 
-                  onChange={e => setSettings({...settings, appPassword: e.target.value})} 
-                />
-                <button 
-                  onClick={() => {
-                    if(!settings.appPassword) return toast.error('الرجاء إدخال كلمة سر');
-                    toast.success('تم حفظ كلمة السر بنجاح ✓');
-                    setActiveModal(null);
-                  }} 
-                  className="w-full bg-header text-header py-3 rounded-lg font-bold shadow-md active:scale-95 transition-transform"
-                >
-                  حفظ الإعدادات
-                </button>
+                <div><p className="font-bold flex items-center gap-2">كلمة السر</p></div>
+                <input type="text" className="w-full border p-3 rounded-lg outline-none focus:border-header text-center font-bold tracking-widest text-lg shadow-sm" placeholder="أدخل كلمة السر هنا..." value={settings.appPassword || ''} onChange={e => setSettings({...settings, appPassword: e.target.value})} />
+                <button onClick={() => { if(!settings.appPassword) return toast.error('الرجاء إدخال كلمة سر'); toast.success('تم حفظ كلمة السر بنجاح ✓'); setActiveModal(null); }} className="w-full bg-header text-header py-3 rounded-lg font-bold shadow-md active:scale-95 transition-transform">حفظ الإعدادات</button>
               </div>
             )}
           </div>
@@ -297,9 +347,7 @@ const SettingsPage = () => {
           {selectedCatAction ? (
             <div className="bg-header text-header p-4 flex items-center justify-between transition-colors shadow-md z-10">
               <div className="flex items-center">
-                <button onClick={() => setSelectedCatAction(null)} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
-                  <X className="w-6 h-6" />
-                </button>
+                <button onClick={() => setSelectedCatAction(null)} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors"><X className="w-6 h-6" /></button>
                 <h2 className="font-bold text-lg">1 محدد</h2>
               </div>
               <div className="flex items-center gap-2">
@@ -311,9 +359,7 @@ const SettingsPage = () => {
             </div>
           ) : (
             <div className="bg-header text-header p-4 flex items-center transition-colors shadow-md z-10">
-              <button onClick={() => setActiveModal(null)} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors">
-                <ArrowRight className="w-6 h-6" />
-              </button>
+              <button onClick={() => setActiveModal(null)} className="ml-4 p-1 hover:bg-white/20 rounded-full transition-colors"><ArrowRight className="w-6 h-6" /></button>
               <h2 className="font-bold text-lg">التصنيفات</h2>
             </div>
           )}
@@ -336,21 +382,15 @@ const SettingsPage = () => {
                 onMouseLeave={handleLongPressEnd}
                 onClick={() => { if (selectedCatAction) setSelectedCatAction(selectedCatAction === cat ? null : cat); }}
               >
-                <div className="flex items-center gap-3 w-2/3">
-                  <span className={`truncate ${selectedCatAction === cat ? 'text-header' : 'text-gray-800'}`}>{cat}</span>
-                </div>
-                <span className={`w-10 text-center rounded-md py-1 ${selectedCatAction === cat ? 'bg-header text-white' : 'bg-gray-100'}`}>
-                  {categoryCounts[cat] || 0}
-                </span>
+                <div className="flex items-center gap-3 w-2/3"><span className={`truncate ${selectedCatAction === cat ? 'text-header' : 'text-gray-800'}`}>{cat}</span></div>
+                <span className={`w-10 text-center rounded-md py-1 ${selectedCatAction === cat ? 'bg-header text-white' : 'bg-gray-100'}`}>{categoryCounts[cat] || 0}</span>
               </div>
             ))}
           </div>
 
           {!selectedCatAction && (
             <div className="p-4 flex justify-center border-t shadow-[0_-5px_15px_rgba(0,0,0,0.05)] bg-white">
-              <button onClick={() => setShowAddCatModal(true)} className="w-14 h-14 bg-header text-header rounded-full shadow-xl flex items-center justify-center active:scale-95 transition-transform">
-                <Plus className="w-6 h-6" />
-              </button>
+              <button onClick={() => setShowAddCatModal(true)} className="w-14 h-14 bg-header text-header rounded-full shadow-xl flex items-center justify-center active:scale-95 transition-transform"><Plus className="w-6 h-6" /></button>
             </div>
           )}
         </div>
@@ -374,22 +414,14 @@ const SettingsPage = () => {
             </div>
 
             <div className="space-y-5">
-                {/* زر التصدير والمشاركة */}
-                <button
-                  onClick={handleExportAndShare}
-                  className="w-full bg-[#5D4037] text-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex flex-col items-center gap-3 active:scale-95 transition-transform"
-                >
+                <button onClick={handleExportAndShare} className="w-full bg-[#5D4037] text-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex flex-col items-center gap-3 active:scale-95 transition-transform">
                   <Share2 className="w-8 h-8" />
                   <span className="text-xl font-black">حفظ ومشاركة النسخة</span>
                   <span className="text-xs opacity-80 text-center font-semibold mt-1">يتم إنشاء ملف كامل لجميع البيانات يمكنك حفظه في الهاتف أو إرساله للواتساب</span>
                 </button>
 
-                {/* زر الاستيراد */}
                 <input type="file" ref={fileInputRef} className="hidden" accept=".json,.txt,.bak" onChange={handleRestoreFile} />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full bg-white border-2 border-dashed border-[#5D4037]/40 text-[#5D4037] p-6 rounded-3xl shadow-sm flex flex-col items-center gap-3 active:scale-95 transition-transform hover:bg-[#5D4037]/5"
-                >
+                <button onClick={() => fileInputRef.current?.click()} className="w-full bg-white border-2 border-dashed border-[#5D4037]/40 text-[#5D4037] p-6 rounded-3xl shadow-sm flex flex-col items-center gap-3 active:scale-95 transition-transform hover:bg-[#5D4037]/5">
                   <Download className="w-8 h-8" />
                   <span className="text-xl font-black">استعادة نسخة سابقة</span>
                   <span className="text-xs text-gray-500 text-center font-semibold mt-1">اختر ملف النسخة الاحتياطية من الجهاز أو الدرايف لاستعادة حساباتك</span>

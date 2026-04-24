@@ -337,9 +337,9 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* الجدول الجديد المطور: قابل للتمرير الأفقي، مساحات واسعة، وبدون ضغط */}
-      <div id="ledger-content-to-capture" className="mt-2 w-full">
-        <Card className="shadow-lg border-0 rounded-none sm:rounded-2xl overflow-hidden">
+      {/* الجدول المصغر هندسياً ليتناسب مع شاشة الهاتف 100% بدون تمرير أفقي */}
+      <div id="ledger-content-to-capture" className="p-2 flex-1 mt-1">
+        <Card className="shadow-lg border-0 rounded-2xl overflow-hidden">
           <CardContent className="p-0">
             {showSearch && (
               <div className="p-3 bg-muted/10 border-b border-border flex items-center gap-2 animate-slide-down">
@@ -349,77 +349,73 @@ const LedgerPage = () => {
               </div>
             )}
             
-            {/* حاوية التمرير الأفقي التي تضمن عرضاً أدنى لا ينضغط أبداً */}
-            <div className="w-full overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-              <div className="min-w-[550px]">
-                
-                {/* الهيدر بمساحات متسعة */}
-                <div className="bg-[#5D4037] text-white grid grid-cols-[90px_110px_1fr_110px] text-center text-[13px] font-extrabold py-4 px-3 shadow-md">
-                  <div className="text-right pl-2">التاريخ</div>
-                  <div>المبلغ</div>
-                  <div className="text-center">التفاصيل</div>
-                  <div className="text-left pr-2">الرصيد</div>
-                </div>
-                
-                {/* جسم الجدول */}
-                <div className="bg-white divide-y divide-border/40 select-none pb-4">
-                  {loading ? (
-                    <div className="p-10 text-center font-bold text-muted-foreground">جاري التحميل...</div>
-                  ) : filteredTransactions.length === 0 ? (
-                    <div className="p-10 text-center text-muted-foreground">لا توجد معاملات مسجلة</div>
-                  ) : (
-                    filteredTransactions.map((tx, idx) => (
-                      <div
-                        key={tx.id || idx}
-                        onTouchStart={() => handleTouchStart(tx)}
-                        onTouchEnd={handleTouchEnd}
-                        onMouseDown={() => handleTouchStart(tx)}
-                        onMouseUp={handleTouchEnd}
-                        /* زيادة المسافات العلوية والسفلية (py-5) لراحة العين */
-                        className={`grid grid-cols-[90px_110px_1fr_110px] text-center px-3 py-5 items-center transition-colors relative ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
-                        style={{ backgroundColor: tx.color || undefined }}
-                      >
-                        {isSelectionMode && (
-                          <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10" onClick={() => handleRowClick(tx)}>
-                            {selectedTxIds.includes(tx.id!) ? <CheckSquare className="w-5 h-5 text-primary" /> : <Square className="w-5 h-5 text-muted-foreground" />}
-                          </div>
-                        )}
-                        
-                        <div className={`text-right text-[11px] font-bold text-muted-foreground pl-2 ${isSelectionMode ? 'pr-6' : ''}`}>
-                          {tx.date}
-                        </div>
-                        
-                        <div className={`font-black text-[15px] tracking-wide`} dir="ltr">
-                          <span className={tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}>
-                            {tx.type === 'debit' ? '(-) ' : '(+) '}
-                            {formatNumber(tx.amount)}
-                          </span>
-                        </div>
-                        
-                        <div className="flex items-center justify-center px-3">
-                          <span className="text-center text-[13px] font-bold text-foreground leading-relaxed break-words w-full">
-                            {tx.details}
-                          </span>
-                        </div>
-                        
-                        <div className="text-left flex items-center justify-end gap-2 font-black text-[14px] w-full pr-2 tracking-wide" dir="ltr">
-                          <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
-                          {tx.balance >= 0 ? (
-                            <svg width="12" height="11" viewBox="0 0 10 9" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
-                              <polygon points="0,0 10,0 5,9" />
-                            </svg>
-                          ) : (
-                            <svg width="12" height="11" viewBox="0 0 10 9" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
-                              <polygon points="5,0 10,9 0,9" />
-                            </svg>
-                          )}
-                        </div>
+            {/* الهيدر: تقسيم دقيق للأعمدة (65, 80, الباقي للتفاصيل, 85) ليتناسب مع عرض الهاتف تماماً */}
+            <div className="bg-[#5D4037] text-white grid grid-cols-[65px_80px_1fr_85px] text-center text-[11px] font-extrabold py-3 px-1 shadow-md">
+              <div className="text-right pl-1">التاريخ</div>
+              <div>المبلغ</div>
+              <div className="text-center">التفاصيل</div>
+              <div className="text-left pr-1">الرصيد</div>
+            </div>
+            
+            <div className="bg-white divide-y divide-border/40 select-none">
+              {loading ? (
+                <div className="p-10 text-center font-bold text-muted-foreground">جاري التحميل...</div>
+              ) : filteredTransactions.length === 0 ? (
+                <div className="p-10 text-center text-muted-foreground">لا توجد معاملات مسجلة</div>
+              ) : (
+                filteredTransactions.map((tx, idx) => (
+                  <div
+                    key={tx.id || idx}
+                    onTouchStart={() => handleTouchStart(tx)}
+                    onTouchEnd={handleTouchEnd}
+                    onMouseDown={() => handleTouchStart(tx)}
+                    onMouseUp={handleTouchEnd}
+                    // ارتفاع ثابت h-[60px] لمربعات متساوية ومرتبة
+                    className={`grid grid-cols-[65px_80px_1fr_85px] text-center px-1 items-center transition-colors relative h-[60px] ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
+                    style={{ backgroundColor: tx.color || undefined }}
+                  >
+                    {isSelectionMode && (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10" onClick={() => handleRowClick(tx)}>
+                        {selectedTxIds.includes(tx.id!) ? <CheckSquare className="w-5 h-5 text-primary" /> : <Square className="w-5 h-5 text-muted-foreground" />}
                       </div>
-                    ))
-                  )}
-                </div>
-
-              </div>
+                    )}
+                    
+                    {/* التاريخ: خط صغير جداً */}
+                    <div className={`text-right text-[9px] font-bold text-muted-foreground pl-1 ${isSelectionMode ? 'pr-6' : ''}`}>
+                      {tx.date}
+                    </div>
+                    
+                    {/* المبلغ: خط مضغوط ليتسع */}
+                    <div className={`font-black text-[12px] tracking-tighter`} dir="ltr">
+                      <span className={tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}>
+                        {tx.type === 'debit' ? '(-) ' : '(+) '}
+                        {formatNumber(tx.amount)}
+                      </span>
+                    </div>
+                    
+                    {/* التفاصيل: استخدام line-clamp-2 مع مسافات ضيقة ليظهر بوضوح في سطرين كحد أقصى */}
+                    <div className="flex items-center justify-center px-1 h-full">
+                      <span className="text-center text-[11px] font-bold text-foreground leading-tight line-clamp-2 w-full break-words" title={tx.details}>
+                        {tx.details}
+                      </span>
+                    </div>
+                    
+                    {/* الرصيد: مساحة كافية مع المثلث المصغر */}
+                    <div className="text-left flex items-center justify-end gap-1 font-black text-[12px] w-full pr-1 tracking-tighter" dir="ltr">
+                      <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
+                      {tx.balance >= 0 ? (
+                        <svg width="8" height="7" viewBox="0 0 10 9" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
+                          <polygon points="0,0 10,0 5,9" />
+                        </svg>
+                      ) : (
+                        <svg width="8" height="7" viewBox="0 0 10 9" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
+                          <polygon points="5,0 10,9 0,9" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getClient, getTransactionsByClient, addTransaction as dbAddTransaction, updateTransaction, deleteTransaction as dbDeleteTransaction, updateClient, type Client, type Transaction } from '@/lib/db';
 import AppHeader from '@/components/AppHeader';
 import { Card, CardContent } from '@/components/ui/card';
-import { Share2, Plus, Pencil, Trash2, X, StickyNote, MoreVertical, Search, Lock, ShieldAlert, Palette, FileDown, Type, Image as ImageIcon, FileSpreadsheet, ArrowDown, ArrowUp, CheckSquare, Square, Star, AlertTriangle } from 'lucide-react';
+import { Share2, Plus, Pencil, Trash2, X, StickyNote, MoreVertical, Search, Lock, ShieldAlert, Palette, FileDown, Type, Image as ImageIcon, FileSpreadsheet, CheckSquare, Square, Star, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatNumber } from '@/lib/utils';
 import { exportLedgerPDF } from '@/lib/pdfExport';
@@ -92,7 +92,6 @@ const LedgerPage = () => {
       )
     : transactions;
 
-  // الضغط المطول
   const handleTouchStart = (tx: Transaction & { balance: number }) => {
     pressTimer.current = setTimeout(() => {
       if (navigator.vibrate) navigator.vibrate(50);
@@ -398,13 +397,19 @@ const LedgerPage = () => {
                       </span>
                     </div>
                     
-                    {/* هنا تم تغيير الأسهم لتكون واضحة باللون والاتجاه */}
+                    {/* هنا المثلث النقي 100% بدون أي مربعات وهمية */}
                     <div className="text-left flex items-center justify-end gap-1.5 font-black text-[13px] w-full" dir="ltr">
                       <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
                       {tx.balance >= 0 ? (
-                        <ArrowDown className="w-4 h-4 text-red-600" />
+                        /* مثلث أحمر للأسفل */
+                        <svg width="10" height="9" viewBox="0 0 10 9" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
+                          <polygon points="0,0 10,0 5,9" />
+                        </svg>
                       ) : (
-                        <ArrowUp className="w-4 h-4 text-green-600" />
+                        /* مثلث أخضر للأعلى */
+                        <svg width="10" height="9" viewBox="0 0 10 9" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
+                          <polygon points="5,0 10,9 0,9" />
+                        </svg>
                       )}
                     </div>
                   </div>

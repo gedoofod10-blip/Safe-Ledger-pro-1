@@ -19,32 +19,27 @@ const LedgerPage = () => {
   const [totalCredit, setTotalCredit] = useState(0);
   const [loading, setLoading] = useState(true);
   
-  // States for Edit Tx
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [editDetails, setEditDetails] = useState('');
   const [editDate, setEditDate] = useState('');
   const [editType, setEditType] = useState<'debit' | 'credit'>('debit'); 
   
-  // UI States
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false); 
   const [showRatingModal, setShowRatingModal] = useState(false);
   
-  // Notes States
   const [showNotes, setShowNotes] = useState(false);
   const [newNote, setNewNote] = useState('');
   const [editingNoteIdx, setEditingNoteIdx] = useState<number | null>(null);
   const [editingNoteText, setEditingNoteText] = useState('');
 
-  // Limits & Balances
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [newLimit, setNewLimit] = useState('');
   const [showCloseBalanceModal, setShowCloseBalanceModal] = useState(false);
   
-  // Long Press & Selection
   const [contextMenuTx, setContextMenuTx] = useState<(Transaction & { balance: number }) | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
@@ -342,8 +337,9 @@ const LedgerPage = () => {
         </div>
       )}
 
-      <div id="ledger-content-to-capture" className="p-3 flex-1 mt-2">
-        <Card className="shadow-lg border-0 overflow-hidden rounded-2xl">
+      {/* الجدول الجديد المطور: قابل للتمرير الأفقي، مساحات واسعة، وبدون ضغط */}
+      <div id="ledger-content-to-capture" className="mt-2 w-full">
+        <Card className="shadow-lg border-0 rounded-none sm:rounded-2xl overflow-hidden">
           <CardContent className="p-0">
             {showSearch && (
               <div className="p-3 bg-muted/10 border-b border-border flex items-center gap-2 animate-slide-down">
@@ -353,68 +349,77 @@ const LedgerPage = () => {
               </div>
             )}
             
-            {/* الهيدر: تم تعديل عرض الأعمدة لإعطاء مساحة أكبر للتفاصيل (70, 85, 1fr, 85) */}
-            <div className="bg-[#5D4037] text-white grid grid-cols-[70px_88px_1fr_88px] text-center text-[12px] font-extrabold py-3.5 px-2 shadow-md rounded-t-xl">
-              <div className="text-right">التاريخ</div>
-              <div>المبلغ</div>
-              <div className="text-center">التفاصيل</div>
-              <div className="text-left">الرصيد</div>
-            </div>
-            
-            <div className="bg-white rounded-b-xl shadow-sm divide-y divide-border/40 select-none border border-border/50 border-t-0">
-              {loading ? (
-                <div className="p-10 text-center font-bold text-muted-foreground">جاري التحميل...</div>
-              ) : filteredTransactions.length === 0 ? (
-                <div className="p-10 text-center text-muted-foreground">لا توجد معاملات مسجلة</div>
-              ) : (
-                filteredTransactions.map((tx, idx) => (
-                  <div
-                    key={tx.id || idx}
-                    onTouchStart={() => handleTouchStart(tx)}
-                    onTouchEnd={handleTouchEnd}
-                    onMouseDown={() => handleTouchStart(tx)}
-                    onMouseUp={handleTouchEnd}
-                    // تم إزالة الارتفاع الثابت h-[68px] واستبداله بـ py-4 لإعطاء مسافة مريحة وديناميكية
-                    className={`grid grid-cols-[70px_88px_1fr_88px] text-center px-2 py-4 items-center transition-all relative ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
-                    style={{ backgroundColor: tx.color || undefined }}
-                  >
-                    {isSelectionMode && (
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10" onClick={() => handleRowClick(tx)}>
-                        {selectedTxIds.includes(tx.id!) ? <CheckSquare className="w-5 h-5 text-primary" /> : <Square className="w-5 h-5 text-muted-foreground" />}
+            {/* حاوية التمرير الأفقي التي تضمن عرضاً أدنى لا ينضغط أبداً */}
+            <div className="w-full overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+              <div className="min-w-[550px]">
+                
+                {/* الهيدر بمساحات متسعة */}
+                <div className="bg-[#5D4037] text-white grid grid-cols-[90px_110px_1fr_110px] text-center text-[13px] font-extrabold py-4 px-3 shadow-md">
+                  <div className="text-right pl-2">التاريخ</div>
+                  <div>المبلغ</div>
+                  <div className="text-center">التفاصيل</div>
+                  <div className="text-left pr-2">الرصيد</div>
+                </div>
+                
+                {/* جسم الجدول */}
+                <div className="bg-white divide-y divide-border/40 select-none pb-4">
+                  {loading ? (
+                    <div className="p-10 text-center font-bold text-muted-foreground">جاري التحميل...</div>
+                  ) : filteredTransactions.length === 0 ? (
+                    <div className="p-10 text-center text-muted-foreground">لا توجد معاملات مسجلة</div>
+                  ) : (
+                    filteredTransactions.map((tx, idx) => (
+                      <div
+                        key={tx.id || idx}
+                        onTouchStart={() => handleTouchStart(tx)}
+                        onTouchEnd={handleTouchEnd}
+                        onMouseDown={() => handleTouchStart(tx)}
+                        onMouseUp={handleTouchEnd}
+                        /* زيادة المسافات العلوية والسفلية (py-5) لراحة العين */
+                        className={`grid grid-cols-[90px_110px_1fr_110px] text-center px-3 py-5 items-center transition-colors relative ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
+                        style={{ backgroundColor: tx.color || undefined }}
+                      >
+                        {isSelectionMode && (
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10" onClick={() => handleRowClick(tx)}>
+                            {selectedTxIds.includes(tx.id!) ? <CheckSquare className="w-5 h-5 text-primary" /> : <Square className="w-5 h-5 text-muted-foreground" />}
+                          </div>
+                        )}
+                        
+                        <div className={`text-right text-[11px] font-bold text-muted-foreground pl-2 ${isSelectionMode ? 'pr-6' : ''}`}>
+                          {tx.date}
+                        </div>
+                        
+                        <div className={`font-black text-[15px] tracking-wide`} dir="ltr">
+                          <span className={tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}>
+                            {tx.type === 'debit' ? '(-) ' : '(+) '}
+                            {formatNumber(tx.amount)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center justify-center px-3">
+                          <span className="text-center text-[13px] font-bold text-foreground leading-relaxed break-words w-full">
+                            {tx.details}
+                          </span>
+                        </div>
+                        
+                        <div className="text-left flex items-center justify-end gap-2 font-black text-[14px] w-full pr-2 tracking-wide" dir="ltr">
+                          <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
+                          {tx.balance >= 0 ? (
+                            <svg width="12" height="11" viewBox="0 0 10 9" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
+                              <polygon points="0,0 10,0 5,9" />
+                            </svg>
+                          ) : (
+                            <svg width="12" height="11" viewBox="0 0 10 9" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
+                              <polygon points="5,0 10,9 0,9" />
+                            </svg>
+                          )}
+                        </div>
                       </div>
-                    )}
-                    
-                    <div className={`text-right text-[10px] font-bold text-muted-foreground ${isSelectionMode ? 'pr-6' : ''}`}>{tx.date}</div>
-                    
-                    <div className={`font-black text-[13px]`} dir="ltr">
-                      <span className={tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}>
-                        {tx.type === 'debit' ? '(-) ' : '(+) '}
-                        {formatNumber(tx.amount)}
-                      </span>
-                    </div>
-                    
-                    {/* تم إزالة line-clamp-2 وإضافة leading-relaxed ليأخذ النص راحته ويعرض كاملاً */}
-                    <div className="flex items-center justify-center px-1">
-                      <span className="text-center text-xs font-bold text-foreground leading-relaxed break-words w-full">
-                        {tx.details}
-                      </span>
-                    </div>
-                    
-                    <div className="text-left flex items-center justify-end gap-1 font-black text-[12px] w-full" dir="ltr">
-                      <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
-                      {tx.balance >= 0 ? (
-                        <svg width="10" height="9" viewBox="0 0 10 9" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
-                          <polygon points="0,0 10,0 5,9" />
-                        </svg>
-                      ) : (
-                        <svg width="10" height="9" viewBox="0 0 10 9" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
-                          <polygon points="5,0 10,9 0,9" />
-                        </svg>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
+                    ))
+                  )}
+                </div>
+
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -438,7 +443,6 @@ const LedgerPage = () => {
         </div>
       </footer>
 
-      {/* باقي المودالز (الملاحظات، التقييم، التعديل...) تبقى كما هي */}
       {showNotes && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-end justify-center animate-fade-in" onClick={() => {setShowNotes(false); setEditingNoteIdx(null);}}>
           <div className="bg-white w-full max-h-[85vh] rounded-t-3xl p-6 overflow-y-auto animate-slide-up shadow-2xl" onClick={e => e.stopPropagation()}>

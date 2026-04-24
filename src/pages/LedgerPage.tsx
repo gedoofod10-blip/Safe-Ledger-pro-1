@@ -343,7 +343,6 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* جدول المعاملات ذو الارتفاع الثابت والمتناسق */}
       <div id="ledger-content-to-capture" className="p-3 flex-1 mt-2">
         <Card className="shadow-lg border-0 overflow-hidden rounded-2xl">
           <CardContent className="p-0">
@@ -375,7 +374,6 @@ const LedgerPage = () => {
                     onTouchEnd={handleTouchEnd}
                     onMouseDown={() => handleTouchStart(tx)}
                     onMouseUp={handleTouchEnd}
-                    // إضافة ارتفاع ثابت h-[68px] لجميع المربعات لضمان التناسق التام
                     className={`grid grid-cols-[75px_95px_1fr_95px] text-center px-2 items-center transition-all relative h-[68px] ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
                     style={{ backgroundColor: tx.color || undefined }}
                   >
@@ -394,19 +392,19 @@ const LedgerPage = () => {
                       </span>
                     </div>
                     
-                    {/* استخدام line-clamp-2 لمنع النص من تشويه حجم المربع */}
                     <div className="flex items-center justify-center h-full px-1">
                       <span className="text-center text-xs font-bold text-foreground leading-snug line-clamp-2 w-full break-words" title={tx.details}>
                         {tx.details}
                       </span>
                     </div>
                     
+                    {/* هنا تم تغيير الأسهم لتكون واضحة باللون والاتجاه */}
                     <div className="text-left flex items-center justify-end gap-1.5 font-black text-[13px] w-full" dir="ltr">
                       <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
                       {tx.balance >= 0 ? (
-                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-red-600 fill-current" aria-hidden="true"><path d="M2.5 6l9.5 12 9.5-12h-19z" /></svg>
+                        <ArrowDown className="w-4 h-4 text-red-600" />
                       ) : (
-                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-green-600 fill-current" aria-hidden="true"><path d="M21.5 18l-9.5-12-9.5 12h19z" /></svg>
+                        <ArrowUp className="w-4 h-4 text-green-600" />
                       )}
                     </div>
                   </div>

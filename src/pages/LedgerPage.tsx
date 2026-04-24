@@ -337,7 +337,6 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* الجدول المصغر هندسياً ليتناسب مع شاشة الهاتف 100% بدون تمرير أفقي */}
       <div id="ledger-content-to-capture" className="p-2 flex-1 mt-1">
         <Card className="shadow-lg border-0 rounded-2xl overflow-hidden">
           <CardContent className="p-0">
@@ -349,7 +348,6 @@ const LedgerPage = () => {
               </div>
             )}
             
-            {/* الهيدر: تقسيم دقيق للأعمدة (65, 80, الباقي للتفاصيل, 85) ليتناسب مع عرض الهاتف تماماً */}
             <div className="bg-[#5D4037] text-white grid grid-cols-[65px_80px_1fr_85px] text-center text-[11px] font-extrabold py-3 px-1 shadow-md">
               <div className="text-right pl-1">التاريخ</div>
               <div>المبلغ</div>
@@ -370,7 +368,6 @@ const LedgerPage = () => {
                     onTouchEnd={handleTouchEnd}
                     onMouseDown={() => handleTouchStart(tx)}
                     onMouseUp={handleTouchEnd}
-                    // ارتفاع ثابت h-[60px] لمربعات متساوية ومرتبة
                     className={`grid grid-cols-[65px_80px_1fr_85px] text-center px-1 items-center transition-colors relative h-[60px] ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
                     style={{ backgroundColor: tx.color || undefined }}
                   >
@@ -380,12 +377,10 @@ const LedgerPage = () => {
                       </div>
                     )}
                     
-                    {/* التاريخ: خط صغير جداً */}
                     <div className={`text-right text-[9px] font-bold text-muted-foreground pl-1 ${isSelectionMode ? 'pr-6' : ''}`}>
                       {tx.date}
                     </div>
                     
-                    {/* المبلغ: خط مضغوط ليتسع */}
                     <div className={`font-black text-[12px] tracking-tighter`} dir="ltr">
                       <span className={tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}>
                         {tx.type === 'debit' ? '(-) ' : '(+) '}
@@ -393,24 +388,20 @@ const LedgerPage = () => {
                       </span>
                     </div>
                     
-                    {/* التفاصيل: استخدام line-clamp-2 مع مسافات ضيقة ليظهر بوضوح في سطرين كحد أقصى */}
                     <div className="flex items-center justify-center px-1 h-full">
                       <span className="text-center text-[11px] font-bold text-foreground leading-tight line-clamp-2 w-full break-words" title={tx.details}>
                         {tx.details}
                       </span>
                     </div>
                     
-                    {/* الرصيد: مساحة كافية مع المثلث المصغر */}
                     <div className="text-left flex items-center justify-end gap-1 font-black text-[12px] w-full pr-1 tracking-tighter" dir="ltr">
                       <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
+                      
+                      {/* هنا استخدمنا الرموز النصية الجاهزة لمثلث نقي 100% بدون أي مربعات */}
                       {tx.balance >= 0 ? (
-                        <svg width="8" height="7" viewBox="0 0 10 9" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
-                          <polygon points="0,0 10,0 5,9" />
-                        </svg>
+                        <span className="text-red-600 text-[10px] leading-none">▼</span>
                       ) : (
-                        <svg width="8" height="7" viewBox="0 0 10 9" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
-                          <polygon points="5,0 10,9 0,9" />
-                        </svg>
+                        <span className="text-green-600 text-[10px] leading-none">▲</span>
                       )}
                     </div>
                   </div>

@@ -88,7 +88,6 @@ export async function exportLedgerPDF(
         html2canvas: { 
           scale: 2,
           useCORS: true, 
-          // تم إزالة letterRendering: true التي كانت تسبب تقطع الحروف العربية
           backgroundColor: '#ffffff',
           logging: false,
           allowTaint: true
@@ -128,24 +127,24 @@ function generatePDFHTML(
     .map((tx, i) => `
       <tr style="background: ${i % 2 === 0 ? '#fcf9f2' : '#ffffff'};">
         <td style="padding: 12px 10px; text-align: center; border-bottom: 1px solid #e5ddd0; font-size: 13px; font-weight: bold;">${tx.date}</td>
-        <td style="padding: 12px 10px; text-align: center; border-bottom: 1px solid #e5ddd0; color: ${tx.type === 'debit' ? '#dc2626' : '#16a34a'}; font-weight: 900; font-size: 14px;">
+        <td style="padding: 12px 10px; text-align: center; border-bottom: 1px solid #e5ddd0; color: ${tx.type === 'debit' ? '#dc2626' : '#16a34a'}; font-weight: bold; font-size: 14px;">
           ${formatNumberEn(tx.amount)} ${tx.type === 'debit' ? '(-)' : '(+)'}
         </td>
-        <td style="padding: 12px 10px; text-align: right; border-bottom: 1px solid #e5ddd0; line-height: 1.6; font-size: 13px; font-weight: 700;">${tx.details}</td>
-        <td style="padding: 12px 10px; text-align: center; border-bottom: 1px solid #e5ddd0; font-weight: 900; font-size: 14px;">${formatNumberEn(Math.abs(tx.balance))}</td>
+        <td style="padding: 12px 10px; text-align: right; border-bottom: 1px solid #e5ddd0; line-height: 1.6; font-size: 13px; font-weight: bold;">${tx.details}</td>
+        <td style="padding: 12px 10px; text-align: center; border-bottom: 1px solid #e5ddd0; font-weight: bold; font-size: 14px;">${formatNumberEn(Math.abs(tx.balance))}</td>
       </tr>
     `)
     .join('');
 
   return `
-    <div id="pdf-content" style="direction: rtl; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; padding: 30px; width: 190mm; margin: 0 auto; background: white; color: #2d1a0d; box-sizing: border-box;">
+    <div id="pdf-content" style="direction: rtl; font-family: 'Arial', 'Tahoma', sans-serif; padding: 30px; width: 190mm; margin: 0 auto; background: white; color: #2d1a0d; box-sizing: border-box;">
       
       <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid #4a341c; padding-bottom: 20px;">
         
         <div style="flex: 1; padding-top: 10px;">
-          <h1 style="margin: 0 0 15px 0; font-size: 26px; color: #4a341c; font-weight: 900; letter-spacing: -0.5px;">${shopName}</h1>
-          <div style="font-size: 14px; color: #444; font-weight: 700; line-height: 1.8;">
-            ${shopPhone ? `<div>📞 الهاتف: <span style="direction: ltr; display: inline-block; font-weight: 900; color: #222;">${shopPhone}</span></div>` : ''}
+          <h1 style="margin: 0 0 15px 0; font-size: 26px; color: #4a341c; font-weight: bold;">${shopName}</h1>
+          <div style="font-size: 14px; color: #444; font-weight: bold; line-height: 1.8;">
+            ${shopPhone ? `<div>📞 الهاتف: <span style="direction: ltr; display: inline-block; font-weight: bold; color: #222;">${shopPhone}</span></div>` : ''}
             ${shopAddress ? `<div>📍 العنوان: <span style="color: #222;">${shopAddress}</span></div>` : ''}
           </div>
         </div>
@@ -154,26 +153,26 @@ function generatePDFHTML(
           ${logoBase64 ? `
             <img src="${logoBase64}" style="width: 140px; height: 140px; margin-bottom: 15px; border-radius: 10px; object-fit: contain; border: 1px solid #f0f0f0; padding: 5px;" />
           ` : ''}
-          <div style="font-size: 20px; font-weight: 900; color: #4a341c; margin-bottom: 5px;">كشف حساب (${client.name})</div>
-          <div style="font-size: 12px; color: #777; font-weight: 800;">تاريخ الإصدار: ${exportDate}</div>
+          <div style="font-size: 20px; font-weight: bold; color: #4a341c; margin-bottom: 5px;">كشف حساب (${client.name})</div>
+          <div style="font-size: 12px; color: #777; font-weight: bold;">تاريخ الإصدار: ${exportDate}</div>
         </div>
       </div>
       
       <div style="display: flex; gap: 20px; margin-bottom: 30px;">
         <div style="flex: 1; background: #fff1f2; padding: 20px 15px; border-radius: 10px; text-align: center; border: 1px solid #fecdd3;">
-          <div style="font-size: 13px; color: #be123c; font-weight: 900; margin-bottom: 8px;">إجمالي عليه</div>
-          <div style="font-size: 22px; font-weight: 900; color: #be123c;">${formatNumberEn(totalDebit)}</div>
+          <div style="font-size: 13px; color: #be123c; font-weight: bold; margin-bottom: 8px;">إجمالي عليه</div>
+          <div style="font-size: 22px; font-weight: bold; color: #be123c;">${formatNumberEn(totalDebit)}</div>
         </div>
         
         <div style="flex: 1; background: #f0fdf4; padding: 20px 15px; border-radius: 10px; text-align: center; border: 1px solid #bbf7d0;">
-          <div style="font-size: 13px; color: #15803d; font-weight: 900; margin-bottom: 8px;">إجمالي له</div>
-          <div style="font-size: 22px; font-weight: 900; color: #15803d;">${formatNumberEn(totalCredit)}</div>
+          <div style="font-size: 13px; color: #15803d; font-weight: bold; margin-bottom: 8px;">إجمالي له</div>
+          <div style="font-size: 22px; font-weight: bold; color: #15803d;">${formatNumberEn(totalCredit)}</div>
         </div>
         
         <div style="flex: 1; background: #fffbeb; padding: 20px 15px; border-radius: 10px; text-align: center; border: 1px solid #fde68a;">
-          <div style="font-size: 13px; color: #b45309; font-weight: 900; margin-bottom: 8px;">الرصيد النهائي</div>
-          <div style="font-size: 22px; font-weight: 900; color: #b45309;">
-            ${formatNumberEn(Math.abs(netBalance))} <span style="font-size: 16px; font-weight: 900;">${netBalance >= 0 ? 'عليه' : 'له'}</span>
+          <div style="font-size: 13px; color: #b45309; font-weight: bold; margin-bottom: 8px;">الرصيد النهائي</div>
+          <div style="font-size: 22px; font-weight: bold; color: #b45309;">
+            ${formatNumberEn(Math.abs(netBalance))} <span style="font-size: 16px; font-weight: bold;">${netBalance >= 0 ? 'عليه' : 'له'}</span>
           </div>
         </div>
       </div>
@@ -181,10 +180,10 @@ function generatePDFHTML(
       <table style="width: 100%; border-collapse: collapse; font-size: 14px; border: 1px solid #4a341c; border-radius: 4px; overflow: hidden;">
         <thead>
           <tr style="background: #4a341c; color: #fdfbf7;">
-            <th style="padding: 14px 10px; text-align: center; font-weight: 900; border-right: 1px solid #5f4528; width: 100px;">التاريخ</th>
-            <th style="padding: 14px 10px; text-align: center; font-weight: 900; border-right: 1px solid #5f4528; width: 130px;">المبلغ</th>
-            <th style="padding: 14px 10px; text-align: right; font-weight: 900; border-right: 1px solid #5f4528;">التفاصيل والبيان</th>
-            <th style="padding: 14px 10px; text-align: center; font-weight: 900; width: 130px;">الرصيد</th>
+            <th style="padding: 14px 10px; text-align: center; font-weight: bold; border-right: 1px solid #5f4528; width: 100px;">التاريخ</th>
+            <th style="padding: 14px 10px; text-align: center; font-weight: bold; border-right: 1px solid #5f4528; width: 130px;">المبلغ</th>
+            <th style="padding: 14px 10px; text-align: right; font-weight: bold; border-right: 1px solid #5f4528;">التفاصيل والبيان</th>
+            <th style="padding: 14px 10px; text-align: center; font-weight: bold; width: 130px;">الرصيد</th>
           </tr>
         </thead>
         <tbody>
@@ -193,7 +192,7 @@ function generatePDFHTML(
       </table>
       
       <div style="margin-top: 40px; padding-top: 15px; border-top: 1px solid #e5ddd0; text-align: center;">
-        <p style="font-size: 13px; color: #666; font-weight: 800; margin: 0;">
+        <p style="font-size: 13px; color: #666; font-weight: bold; margin: 0;">
           شكراً لتعاملكم معنا - تم إصدار هذا الكشف آلياً بواسطة تطبيق دفتر الحسابات
         </p>
       </div>

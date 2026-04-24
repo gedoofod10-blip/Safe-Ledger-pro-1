@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getClient, getTransactionsByClient, addTransaction as dbAddTransaction, updateTransaction, deleteTransaction as dbDeleteTransaction, updateClient, type Client, type Transaction } from '@/lib/db';
 import AppHeader from '@/components/AppHeader';
 import { Card, CardContent } from '@/components/ui/card';
-import { Share2, Plus, Pencil, Trash2, X, StickyNote, MoreVertical, Search, Lock, ShieldAlert, Palette, FileDown, Type, Image as ImageIcon, FileSpreadsheet, ArrowDown, ArrowUp, CheckSquare, Square, Star, Copy, Eraser, HelpCircle, AlertTriangle } from 'lucide-react';
+import { Share2, Plus, Pencil, Trash2, X, StickyNote, MoreVertical, Search, Lock, ShieldAlert, Palette, FileDown, Type, Image as ImageIcon, FileSpreadsheet, ArrowDown, ArrowUp, CheckSquare, Square, Star, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatNumber } from '@/lib/utils';
 import { exportLedgerPDF } from '@/lib/pdfExport';
@@ -106,7 +106,6 @@ const LedgerPage = () => {
     }
   };
 
-  // الملاحظات
   const handleAddNote = async () => {
     if (!client?.id || !newNote.trim()) return;
     const updatedNotes = [...(client.notes || []), newNote.trim()];
@@ -134,7 +133,6 @@ const LedgerPage = () => {
     toast.success('تم حذف الملاحظة');
   };
 
-  // سقف الحساب والإغلاق
   const handleSaveLimit = async () => {
     if (!client?.id) return;
     await updateClient(client.id, { budgetLimit: Number(newLimit) });
@@ -157,7 +155,6 @@ const LedgerPage = () => {
     toast.success('تم إغلاق وتصفية الحساب بنجاح');
   };
 
-  // الحذف والتعديل والتلوين
   const saveEditTx = async () => {
     if (!editingTx?.id) return;
     await updateTransaction(editingTx.id, { amount: parseFloat(editAmount) || 0, details: editDetails.trim(), date: editDate, type: editType });
@@ -201,18 +198,11 @@ const LedgerPage = () => {
     toast.success('تم تحديث التقييم');
   };
 
-// --- دوال المشاركة الآمنة للهواتف (استبدل القديمة بهذه) ---
-  
   const safeShareFile = async (file: File) => {
     try {
-      // فحص دعم الهاتف لقائمة المشاركة الفعلية
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: 'مشاركة كشف الحساب',
-        });
+        await navigator.share({ files: [file], title: 'مشاركة كشف الحساب' });
       } else {
-        // تنزيل مباشر آمن إذا كان الهاتف لا يدعم القائمة
         const url = URL.createObjectURL(file);
         const a = document.createElement('a');
         a.href = url;
@@ -221,13 +211,10 @@ const LedgerPage = () => {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        toast.success('تم تنزيل الملف في جهازك بنجاح');
+        toast.success('تم تنزيل الملف بنجاح');
       }
     } catch (error: any) {
-      // تجاهل الخطأ إذا تراجع المستخدم وأغلق القائمة بنفسه
-      if (error.name !== 'AbortError') {
-        toast.error('حدث خطأ أثناء محاولة المشاركة');
-      }
+      if (error.name !== 'AbortError') toast.error('خطأ في المشاركة');
     }
     setShowShareModal(false);
   };
@@ -237,82 +224,40 @@ const LedgerPage = () => {
     const t = toast.loading('جاري تجهيز ملف PDF...');
     try {
       const blob = await exportLedgerPDF(client, transactions, totalDebit, totalCredit, netBalance);
-      const file = new File([blob], `كشف_حساب_${client.name}.pdf`, { type: 'application/pdf' });
+      await safeShareFile(new File([blob], `كشف_حساب_${client.name}.pdf`, { type: 'application/pdf' }));
       toast.dismiss(t);
-      await safeShareFile(file);
     } catch (e) { 
       toast.dismiss(t);
-      toast.error('حدث خطأ أثناء تجهيز ملف PDF'); 
-      setShowShareModal(false);
+      toast.error('خطأ أثناء التصدير'); 
     }
+    setShowShareModal(false);
   };
 
   const handleShareImage = async () => {
-    const t = toast.loading('جاري التقاط الصورة...');
+    const t = toast.loading('جاري تجهيز الصورة...');
     try {
       const element = document.getElementById('ledger-content-to-capture');
-      if (!element) throw new Error('Element not found');
-      
-      // استدعاء ديناميكي لمنع الشاشة البيضاء عند فتح الصفحة
-      const html2canvasModule = await import('html2canvas');
-      const html2canvas = html2canvasModule.default || html2canvasModule;
-      
+      if (!element) return;
       const canvas = await html2canvas(element, { useCORS: true, scale: 2, backgroundColor: '#ffffff' });
       canvas.toBlob(async (blob) => {
         toast.dismiss(t);
-        if (blob) {
-          const file = new File([blob], `كشف_حساب_${client?.name}.png`, { type: 'image/png' });
-          await safeShareFile(file);
-        } else {
-          toast.error('فشل إنشاء الصورة');
-          setShowShareModal(false);
-        }
-      }, 'image/png');
+        if (blob) await safeShareFile(new File([blob], `كشف_${client?.name}.png`, { type: 'image/png' }));
+      });
     } catch (e) { 
       toast.dismiss(t);
-      toast.error('حدث خطأ أثناء التقاط الصورة'); 
-      setShowShareModal(false);
+      toast.error('فشل إنشاء الصورة'); 
     }
+    setShowShareModal(false);
   };
 
   const handleShareExcel = async () => {
     if (!client) return;
-    const t = toast.loading('جاري تجهيز ملف الإكسل...');
     try {
       const file = await generateExcelFile(client, transactions);
-      toast.dismiss(t);
       await safeShareFile(file);
-    } catch (e) { 
-      toast.dismiss(t);
-      toast.error('حدث خطأ أثناء تجهيز الإكسل'); 
-      setShowShareModal(false);
-    }
-  };
-
-  const handleShareText = async () => {
-    if (!client) return;
-    try {
-      // توليد النص داخلياً لتجنب أعطال الملفات الخارجية
-      let text = `📄 كشف حساب: ${client.name}\n`;
-      text += `📅 التاريخ: ${new Date().toISOString().split('T')[0]}\n\n`;
-      text += `الرصيد النهائي: ${formatNumber(Math.abs(netBalance))} ${netBalance >= 0 ? 'عليه' : 'له'}\n\n`;
-      text += `--- تفاصيل المعاملات ---\n`;
-      transactions.forEach(tx => {
-        text += `▪ ${tx.date} | ${formatNumber(tx.amount)} ${tx.type === 'debit' ? 'عليه' : 'له'}\n  البيان: ${tx.details}\n`;
-      });
-      
-      if (navigator.share) {
-        await navigator.share({ title: `كشف حساب ${client.name}`, text: text });
-      } else {
-        await navigator.clipboard.writeText(text);
-        toast.success('تم نسخ النص للحافظة بنجاح');
-      }
-    } catch (e: any) { 
-      if (e.name !== 'AbortError') toast.error('خطأ في مشاركة النص');
-    }
+    } catch (e) { toast.error('خطأ بالتصدير'); }
     setShowShareModal(false);
   };
-  // ------------------------------------------------------------------
 
   return (
     <div className="min-h-screen bg-background pb-28 flex flex-col overflow-x-hidden" dir="rtl">
@@ -329,7 +274,6 @@ const LedgerPage = () => {
         }
       />
 
-      {/* قائمة الـ 3 نقاط */}
       {showMenu && (
         <div className="fixed inset-0 z-50" onClick={() => setShowMenu(false)}>
           <div className="absolute top-14 left-4 w-60 bg-card border border-border shadow-2xl rounded-2xl overflow-hidden animate-scale-in" onClick={e => e.stopPropagation()}>
@@ -356,7 +300,7 @@ const LedgerPage = () => {
       )}
 
       {isSelectionMode && (
-        <div className="fixed top-0 left-0 right-0 h-14 bg-header text-header z-[60] flex items-center justify-between px-4 shadow-lg animate-fade-in" dir="rtl">
+        <div className="fixed top-0 left-0 right-0 h-14 bg-[#5D4037] text-white z-[60] flex items-center justify-between px-4 shadow-lg animate-fade-in" dir="rtl">
           <div className="flex items-center gap-4">
             <button onClick={() => {setIsSelectionMode(false); setSelectedTxIds([]);}} className="p-2 bg-white/20 rounded-lg"><X className="w-5 h-5"/></button>
             <span className="font-bold">{selectedTxIds.length} محدد</span>
@@ -365,13 +309,10 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* سقف الحساب */}
       {budgetLimit > 0 && (
         <div className="sticky top-[52px] z-30 mx-3 mt-2 rounded-xl overflow-hidden shadow-md animate-fade-in border border-white/10">
           <div className="bg-gradient-to-l from-[#5D4037] to-[#8D6E63] text-white p-3.5 flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              
-              {/* الجهة اليمنى: المتبقي من السقف (بارز وواضح) */}
               <div className="flex flex-col">
                 <span className="text-[10px] opacity-80 font-bold mb-1">المتبقي من السقف</span>
                 <div className="flex items-center gap-1.5 leading-none">
@@ -381,8 +322,6 @@ const LedgerPage = () => {
                   </span>
                 </div>
               </div>
-
-              {/* الجهة اليسرى: السقف والاستهلاك (تحت بعض بأناقة وبنفس العرض) */}
               <div className="flex flex-col gap-1.5 items-end">
                 <div className="flex items-center justify-between bg-black/20 px-2 py-1 rounded w-[110px]">
                   <span className="text-[9px] opacity-70">السقف:</span>
@@ -394,8 +333,6 @@ const LedgerPage = () => {
                 </div>
               </div>
             </div>
-
-            {/* شريط تقدم بحجم (متوسط) h-3 ليكون واضحاً وأنيقاً */}
             <div className="w-full h-3 bg-black/30 rounded-full overflow-hidden shadow-inner">
               <div
                 className={`h-full rounded-full transition-all duration-700 ease-out ${isOverBudget ? 'bg-red-500' : 'bg-yellow-400'}`}
@@ -405,7 +342,8 @@ const LedgerPage = () => {
           </div>
         </div>
       )}
-      {/* جدول المعاملات (مطابق للصورة) */}
+
+      {/* جدول المعاملات ذو الارتفاع الثابت والمتناسق */}
       <div id="ledger-content-to-capture" className="p-3 flex-1 mt-2">
         <Card className="shadow-lg border-0 overflow-hidden rounded-2xl">
           <CardContent className="p-0">
@@ -417,7 +355,7 @@ const LedgerPage = () => {
               </div>
             )}
             
-            <div className="bg-[#5D4037] text-white grid grid-cols-[75px_80px_1fr_90px] text-center text-[12px] font-extrabold py-3 px-2 shadow-md rounded-t-xl">
+            <div className="bg-[#5D4037] text-white grid grid-cols-[75px_95px_1fr_95px] text-center text-[12px] font-extrabold py-3 px-2 shadow-md rounded-t-xl">
               <div className="text-right">التاريخ</div>
               <div>المبلغ</div>
               <div className="text-center">التفاصيل</div>
@@ -428,7 +366,7 @@ const LedgerPage = () => {
               {loading ? (
                 <div className="p-10 text-center font-bold text-muted-foreground">جاري التحميل...</div>
               ) : filteredTransactions.length === 0 ? (
-                <div className="p-10 text-center text-muted-foreground">لا توجد معاملات</div>
+                <div className="p-10 text-center text-muted-foreground">لا توجد معاملات مسجلة</div>
               ) : (
                 filteredTransactions.map((tx, idx) => (
                   <div
@@ -437,7 +375,8 @@ const LedgerPage = () => {
                     onTouchEnd={handleTouchEnd}
                     onMouseDown={() => handleTouchStart(tx)}
                     onMouseUp={handleTouchEnd}
-                    className={`grid grid-cols-[75px_80px_1fr_90px] text-center py-3.5 px-2 items-center transition-all relative ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
+                    // إضافة ارتفاع ثابت h-[68px] لجميع المربعات لضمان التناسق التام
+                    className={`grid grid-cols-[75px_95px_1fr_95px] text-center px-2 items-center transition-all relative h-[68px] ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
                     style={{ backgroundColor: tx.color || undefined }}
                   >
                     {isSelectionMode && (
@@ -449,11 +388,18 @@ const LedgerPage = () => {
                     <div className={`text-right text-[10px] font-bold text-muted-foreground ${isSelectionMode ? 'pr-6' : ''}`}>{tx.date}</div>
                     
                     <div className={`font-black text-sm`} dir="ltr">
-                      {tx.type === 'debit' ? <span className="text-red-600">(-) </span> : ''}
-                      <span className={tx.type === 'debit' ? 'text-red-600' : 'text-foreground'}>{formatNumber(tx.amount)}</span>
+                      <span className={tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}>
+                        {tx.type === 'debit' ? '(-) ' : '(+) '}
+                        {formatNumber(tx.amount)}
+                      </span>
                     </div>
                     
-                    <div className="text-center text-xs font-bold text-foreground break-words px-1">{tx.details}</div>
+                    {/* استخدام line-clamp-2 لمنع النص من تشويه حجم المربع */}
+                    <div className="flex items-center justify-center h-full px-1">
+                      <span className="text-center text-xs font-bold text-foreground leading-snug line-clamp-2 w-full break-words" title={tx.details}>
+                        {tx.details}
+                      </span>
+                    </div>
                     
                     <div className="text-left flex items-center justify-end gap-1.5 font-black text-[13px] w-full" dir="ltr">
                       <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
@@ -489,7 +435,6 @@ const LedgerPage = () => {
         </div>
       </footer>
 
-      {/* مودال الملاحظات المتطور */}
       {showNotes && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-end justify-center animate-fade-in" onClick={() => {setShowNotes(false); setEditingNoteIdx(null);}}>
           <div className="bg-white w-full max-h-[85vh] rounded-t-3xl p-6 overflow-y-auto animate-slide-up shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -497,59 +442,34 @@ const LedgerPage = () => {
                 <h3 className="text-xl font-black text-[#5D4037]">ملاحظات العميل</h3>
                 <button onClick={() => {setShowNotes(false); setEditingNoteIdx(null);}} className="p-2 bg-muted rounded-full"><X className="w-5 h-5"/></button>
              </div>
-             
-             {/* إضافة ملاحظة جديدة */}
              <div className="relative mb-6">
-                <textarea 
-                  placeholder="اكتب ملاحظة جديدة هنا..." 
-                  value={newNote} 
-                  onChange={e => setNewNote(e.target.value)} 
-                  className="w-full bg-muted/50 border border-border/50 rounded-2xl p-4 text-sm font-bold min-h-[100px] outline-none focus:ring-2 focus:ring-[#5D4037]/30 text-right" 
-                />
+                <textarea placeholder="اكتب ملاحظة جديدة..." value={newNote} onChange={e => setNewNote(e.target.value)} className="w-full bg-muted/50 border border-border/50 rounded-2xl p-4 text-sm font-bold min-h-[100px] outline-none text-right" />
                 <button onClick={handleAddNote} className="absolute bottom-3 left-3 bg-[#5D4037] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md active:scale-95">حفظ</button>
              </div>
-
-             {/* قائمة الملاحظات المحفوظة والتعديل عليها */}
              <div className="space-y-3">
-                {client?.notes?.length === 0 ? (
-                  <div className="text-center py-10 text-muted-foreground font-bold opacity-50">لا توجد ملاحظات مسجلة للآن</div>
-                ) : (
-                  client?.notes?.map((note, i) => (
-                    <div key={i} className="bg-muted/30 border border-border/50 p-4 rounded-2xl flex flex-col gap-3 group text-right">
-                      {editingNoteIdx === i ? (
-                        <div className="flex flex-col gap-2">
-                          <textarea 
-                            value={editingNoteText} 
-                            onChange={e => setEditingNoteText(e.target.value)} 
-                            className="w-full bg-background border border-border rounded-xl p-3 text-sm font-bold min-h-[80px] outline-none focus:border-[#5D4037]"
-                          />
-                          <div className="flex gap-2">
-                            <button onClick={handleSaveEditNote} className="flex-1 bg-[#5D4037] text-white py-2 rounded-lg font-bold text-xs">حفظ التعديل</button>
-                            <button onClick={() => setEditingNoteIdx(null)} className="flex-1 bg-muted text-foreground py-2 rounded-lg font-bold text-xs">إلغاء</button>
-                          </div>
+                {client?.notes?.map((note, i) => (
+                  <div key={i} className="bg-muted/30 border border-border/50 p-4 rounded-2xl flex flex-col gap-3 text-right">
+                    {editingNoteIdx === i ? (
+                      <div className="flex flex-col gap-2">
+                        <textarea value={editingNoteText} onChange={e => setEditingNoteText(e.target.value)} className="w-full bg-background border border-border rounded-xl p-3 text-sm font-bold min-h-[80px] outline-none" />
+                        <div className="flex gap-2"><button onClick={handleSaveEditNote} className="flex-1 bg-[#5D4037] text-white py-2 rounded-lg font-bold text-xs">حفظ</button><button onClick={() => setEditingNoteIdx(null)} className="flex-1 bg-muted py-2 rounded-lg font-bold text-xs">إلغاء</button></div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between items-start gap-3">
+                        <p className="font-bold text-sm flex-1 leading-relaxed text-foreground"><span className="text-[#5D4037] ml-1 bg-[#5D4037]/10 px-1.5 py-0.5 rounded-md text-xs">{i + 1}</span>{note}</p>
+                        <div className="flex gap-2">
+                          <button onClick={() => { setEditingNoteIdx(i); setEditingNoteText(note); }} className="p-1.5 bg-white border border-border/50 rounded-lg shadow-sm hover:text-blue-600"><Pencil className="w-4 h-4"/></button>
+                          <button onClick={() => handleDeleteNote(i)} className="p-1.5 bg-white border border-border/50 rounded-lg shadow-sm hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
                         </div>
-                      ) : (
-                        <div className="flex justify-between items-start gap-3">
-                          <p className="font-bold text-sm flex-1 leading-relaxed text-foreground">
-                            <span className="text-[#5D4037] ml-1 bg-[#5D4037]/10 px-1.5 py-0.5 rounded-md text-xs">{i + 1}</span> 
-                            {note}
-                          </p>
-                          <div className="flex gap-2">
-                            <button onClick={() => { setEditingNoteIdx(i); setEditingNoteText(note); }} className="p-1.5 bg-white border border-border/50 rounded-lg shadow-sm hover:text-blue-600 transition-colors"><Pencil className="w-4 h-4"/></button>
-                            <button onClick={() => navigator.clipboard.writeText(note)} className="p-1.5 bg-white border border-border/50 rounded-lg shadow-sm hover:text-green-600 transition-colors"><Copy className="w-4 h-4"/></button>
-                            <button onClick={() => handleDeleteNote(i)} className="p-1.5 bg-white border border-border/50 rounded-lg shadow-sm hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
+                      </div>
+                    )}
+                  </div>
+                ))}
              </div>
           </div>
         </div>
       )}
 
-      {/* المودالز الأخرى */}
       {showRatingModal && (
         <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowRatingModal(false)}>
           <Card className="shadow-2xl w-full max-w-xs border-0 rounded-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -564,7 +484,6 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* القائمة المنبثقة من الضغط المطول (تعديل - تلوين - حذف) */}
       {contextMenuTx && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[110] flex items-center justify-center p-6 animate-fade-in" onClick={() => setContextMenuTx(null)}>
           <Card className="w-full max-w-xs shadow-2xl rounded-3xl overflow-hidden text-right" onClick={e => e.stopPropagation()}>
@@ -578,18 +497,14 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* نافذة الألوان (للتلوين المخصص) */}
       {showColorPicker && (
         <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center animate-fade-in" onClick={() => setShowColorPicker(false)}>
            <Card className="p-6 w-80 rounded-3xl shadow-2xl" onClick={e => e.stopPropagation()} dir="rtl">
               <h4 className="text-center font-black mb-5 text-[#5D4037] text-lg">اختر لون المعاملة</h4>
               <div className="grid grid-cols-4 gap-4">
-                 {[
-                   { name: 'افتراضي', color: '' }, { name: 'أحمر', color: '#fee2e2' }, { name: 'أخضر', color: '#dcfce7' }, { name: 'أصفر', color: '#fef3c7' },
-                   { name: 'أزرق', color: '#dbeafe' }, { name: 'بنفسجي', color: '#f3e8ff' }, { name: 'برتقالي', color: '#ffedd5' }, { name: 'رمادي', color: '#f3f4f6' }
-                 ].map(c => (
+                 {[ { name: 'افتراضي', color: '' }, { name: 'أحمر', color: '#fee2e2' }, { name: 'أخضر', color: '#dcfce7' }, { name: 'أصفر', color: '#fef3c7' }, { name: 'أزرق', color: '#dbeafe' }, { name: 'بنفسجي', color: '#f3e8ff' }, { name: 'برتقالي', color: '#ffedd5' }, { name: 'رمادي', color: '#f3f4f6' }].map(c => (
                    <button key={c.name} onClick={() => handleColorSelect(c.color)} className="flex flex-col items-center gap-2 active:scale-90 transition-transform">
-                      <div className="w-12 h-12 rounded-full border border-border shadow-sm" style={{ backgroundColor: c.color || '#fff' }} />
+                      <div className="w-12 h-12 rounded-full border-2 border-border shadow-sm" style={{ backgroundColor: c.color || '#fff' }} />
                       <span className="text-[10px] font-bold text-muted-foreground">{c.name}</span>
                    </button>
                  ))}
@@ -599,7 +514,6 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* نافذة التعديل */}
       {editingTx && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[120] flex items-center justify-center p-4 animate-fade-in" onClick={() => setEditingTx(null)}>
           <Card className="w-full max-w-sm p-5 space-y-4 rounded-3xl shadow-2xl" onClick={e => e.stopPropagation()} dir="rtl">
@@ -611,27 +525,18 @@ const LedgerPage = () => {
               <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={editType === 'debit'} onChange={() => setEditType('debit')} className="w-5 h-5" /><span className="font-bold">عليه</span></label>
               <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={editType === 'credit'} onChange={() => setEditType('credit')} className="w-5 h-5" /><span className="font-bold">له</span></label>
             </div>
-            <div className="flex gap-2">
-              <button onClick={saveEditTx} className="flex-1 bg-[#5D4037] text-white py-3 rounded-xl font-bold">حفظ التعديل</button>
-              <button onClick={() => setEditingTx(null)} className="flex-1 bg-muted py-3 rounded-xl font-bold">إلغاء</button>
-            </div>
+            <div className="flex gap-2"><button onClick={saveEditTx} className="flex-1 bg-[#5D4037] text-white py-3 rounded-xl font-bold">حفظ التعديل</button><button onClick={() => setEditingTx(null)} className="flex-1 bg-muted py-3 rounded-xl font-bold">إلغاء</button></div>
           </Card>
         </div>
       )}
 
-      {/* باقي المودالز السابقة */}
       {showLimitModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowLimitModal(false)}>
           <Card className="shadow-2xl w-full max-w-xs border-0 animate-scale-in rounded-3xl overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
-            <div className="bg-[#5D4037] p-4 text-white text-center">
-               <h3 className="text-lg font-black flex items-center justify-center gap-2"><ShieldAlert className="w-5 h-5"/> سقف الحساب</h3>
-            </div>
+            <div className="bg-[#5D4037] p-4 text-white text-center font-black">سقف الحساب</div>
             <CardContent className="p-5 space-y-4 bg-card">
-              <input className="w-full border border-input rounded-xl px-4 py-3 text-left bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-[#5D4037] font-sans text-lg tracking-wider font-bold" type="number" lang="en" dir="ltr" value={newLimit} onChange={e => setNewLimit(e.target.value)} placeholder="0" />
-              <div className="flex gap-2">
-                <button onClick={handleSaveLimit} className="flex-1 bg-[#5D4037] text-white py-3 rounded-xl font-bold active:scale-95 transition-transform">حفظ</button>
-                <button onClick={() => setShowLimitModal(false)} className="flex-1 bg-muted py-3 rounded-xl font-bold">إلغاء</button>
-              </div>
+              <input className="w-full border border-input rounded-xl px-4 py-3 text-left bg-background font-sans text-lg tracking-wider font-bold" type="number" lang="en" dir="ltr" value={newLimit} onChange={e => setNewLimit(e.target.value)} placeholder="0" />
+              <div className="flex gap-2"><button onClick={handleSaveLimit} className="flex-1 bg-[#5D4037] text-white py-3 rounded-xl font-bold active:scale-95 transition-transform">حفظ</button><button onClick={() => setShowLimitModal(false)} className="flex-1 bg-muted py-3 rounded-xl font-bold">إلغاء</button></div>
             </CardContent>
           </Card>
         </div>
@@ -640,15 +545,9 @@ const LedgerPage = () => {
       {showCloseBalanceModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowCloseBalanceModal(false)}>
           <Card className="shadow-2xl w-full max-w-xs border-0 animate-scale-in rounded-3xl overflow-hidden" onClick={e => e.stopPropagation()} dir="rtl">
-            <div className="bg-[#5D4037] p-4 text-white text-center">
-               <h3 className="text-lg font-black flex items-center justify-center gap-2"><Lock className="w-5 h-5"/> إغلاق الحساب</h3>
-            </div>
-            <CardContent className="p-5 text-center space-y-4">
-              <p className="font-bold text-sm text-muted-foreground">سيتم إنشاء معاملة تصفير للرصيد لإنهاء الحساب الحالي.</p>
-              <div className="flex gap-2">
-                <button onClick={handleCloseBalance} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold active:scale-95 transition-transform">تصفية وإغلاق</button>
-                <button onClick={() => setShowCloseBalanceModal(false)} className="flex-1 bg-muted py-3 rounded-xl font-bold">إلغاء</button>
-              </div>
+            <div className="bg-[#5D4037] p-4 text-white text-center font-black">إغلاق الحساب</div>
+            <CardContent className="p-5 text-center space-y-4"><p className="font-bold text-sm text-muted-foreground">سيتم إنشاء معاملة تصفير للرصيد لإنهاء الحساب الحالي.</p>
+              <div className="flex gap-2"><button onClick={handleCloseBalance} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold active:scale-95 transition-transform">تصفية وإغلاق</button><button onClick={() => setShowCloseBalanceModal(false)} className="flex-1 bg-muted py-3 rounded-xl font-bold">إلغاء</button></div>
             </CardContent>
           </Card>
         </div>
@@ -660,12 +559,12 @@ const LedgerPage = () => {
             <div className="w-12 h-1.5 bg-muted mx-auto rounded-full mb-2" />
             <div className="text-center"><h3 className="text-xl font-extrabold text-foreground">مشاركة كشف الحساب</h3></div>
             <div className="grid grid-cols-2 gap-4 mt-4">
-              <button onClick={handleSharePDF} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all active:scale-95"><div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center"><FileDown className="w-6 h-6 text-primary" /></div><span className="font-bold text-sm">ملف PDF</span></button>
-              <button onClick={handleShareImage} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all active:scale-95"><div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center"><ImageIcon className="w-6 h-6 text-primary" /></div><span className="font-bold text-sm">صورة كشف</span></button>
-              <button onClick={handleShareExcel} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all active:scale-95"><div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center"><FileSpreadsheet className="w-6 h-6 text-primary" /></div><span className="font-bold text-sm">ملف إكسل</span></button>
-              <button onClick={handleShareText} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 hover:bg-primary/10 border border-primary/10 transition-all active:scale-95"><div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center"><Type className="w-6 h-6 text-primary" /></div><span className="font-bold text-sm">نص فقط</span></button>
+              <button onClick={handleSharePDF} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 active:scale-95"><div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center"><FileDown className="w-6 h-6 text-primary" /></div><span className="font-bold text-sm">ملف PDF</span></button>
+              <button onClick={handleShareImage} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 active:scale-95"><div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center"><ImageIcon className="w-6 h-6 text-primary" /></div><span className="font-bold text-sm">صورة كشف</span></button>
+              <button onClick={handleShareExcel} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 active:scale-95"><div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center"><FileSpreadsheet className="w-6 h-6 text-primary" /></div><span className="font-bold text-sm">ملف إكسل</span></button>
+              <button onClick={() => { const text = `📄 كشف حساب: ${client?.name}\nالرصيد: ${formatNumber(Math.abs(netBalance))} ${netBalance >= 0 ? 'عليه' : 'له'}`; navigator.share({ text }); }} className="flex flex-col items-center gap-3 p-5 rounded-2xl bg-primary/5 active:scale-95"><div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center"><Type className="w-6 h-6 text-primary" /></div><span className="font-bold text-sm">نص فقط</span></button>
             </div>
-            <button onClick={() => setShowShareModal(false)} className="w-full mt-2 p-4 rounded-xl bg-muted font-bold active:scale-95">إلغاء</button>
+            <button onClick={() => setShowShareModal(false)} className="w-full mt-2 p-4 rounded-xl bg-muted font-bold">إلغاء</button>
           </div>
         </div>
       )}

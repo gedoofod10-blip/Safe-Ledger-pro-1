@@ -353,7 +353,8 @@ const LedgerPage = () => {
               </div>
             )}
             
-            <div className="bg-[#5D4037] text-white grid grid-cols-[75px_95px_1fr_95px] text-center text-[12px] font-extrabold py-3 px-2 shadow-md rounded-t-xl">
+            {/* الهيدر: تم تعديل عرض الأعمدة لإعطاء مساحة أكبر للتفاصيل (70, 85, 1fr, 85) */}
+            <div className="bg-[#5D4037] text-white grid grid-cols-[70px_88px_1fr_88px] text-center text-[12px] font-extrabold py-3.5 px-2 shadow-md rounded-t-xl">
               <div className="text-right">التاريخ</div>
               <div>المبلغ</div>
               <div className="text-center">التفاصيل</div>
@@ -373,7 +374,8 @@ const LedgerPage = () => {
                     onTouchEnd={handleTouchEnd}
                     onMouseDown={() => handleTouchStart(tx)}
                     onMouseUp={handleTouchEnd}
-                    className={`grid grid-cols-[75px_95px_1fr_95px] text-center px-2 items-center transition-all relative h-[68px] ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
+                    // تم إزالة الارتفاع الثابت h-[68px] واستبداله بـ py-4 لإعطاء مسافة مريحة وديناميكية
+                    className={`grid grid-cols-[70px_88px_1fr_88px] text-center px-2 py-4 items-center transition-all relative ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
                     style={{ backgroundColor: tx.color || undefined }}
                   >
                     {isSelectionMode && (
@@ -384,29 +386,27 @@ const LedgerPage = () => {
                     
                     <div className={`text-right text-[10px] font-bold text-muted-foreground ${isSelectionMode ? 'pr-6' : ''}`}>{tx.date}</div>
                     
-                    <div className={`font-black text-sm`} dir="ltr">
+                    <div className={`font-black text-[13px]`} dir="ltr">
                       <span className={tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}>
                         {tx.type === 'debit' ? '(-) ' : '(+) '}
                         {formatNumber(tx.amount)}
                       </span>
                     </div>
                     
-                    <div className="flex items-center justify-center h-full px-1">
-                      <span className="text-center text-xs font-bold text-foreground leading-snug line-clamp-2 w-full break-words" title={tx.details}>
+                    {/* تم إزالة line-clamp-2 وإضافة leading-relaxed ليأخذ النص راحته ويعرض كاملاً */}
+                    <div className="flex items-center justify-center px-1">
+                      <span className="text-center text-xs font-bold text-foreground leading-relaxed break-words w-full">
                         {tx.details}
                       </span>
                     </div>
                     
-                    {/* هنا المثلث النقي 100% بدون أي مربعات وهمية */}
-                    <div className="text-left flex items-center justify-end gap-1.5 font-black text-[13px] w-full" dir="ltr">
+                    <div className="text-left flex items-center justify-end gap-1 font-black text-[12px] w-full" dir="ltr">
                       <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
                       {tx.balance >= 0 ? (
-                        /* مثلث أحمر للأسفل */
                         <svg width="10" height="9" viewBox="0 0 10 9" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
                           <polygon points="0,0 10,0 5,9" />
                         </svg>
                       ) : (
-                        /* مثلث أخضر للأعلى */
                         <svg width="10" height="9" viewBox="0 0 10 9" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
                           <polygon points="5,0 10,9 0,9" />
                         </svg>
@@ -438,6 +438,7 @@ const LedgerPage = () => {
         </div>
       </footer>
 
+      {/* باقي المودالز (الملاحظات، التقييم، التعديل...) تبقى كما هي */}
       {showNotes && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-end justify-center animate-fade-in" onClick={() => {setShowNotes(false); setEditingNoteIdx(null);}}>
           <div className="bg-white w-full max-h-[85vh] rounded-t-3xl p-6 overflow-y-auto animate-slide-up shadow-2xl" onClick={e => e.stopPropagation()}>

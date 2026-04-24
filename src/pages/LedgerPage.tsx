@@ -367,30 +367,35 @@ const LedgerPage = () => {
 
       {/* سقف الحساب */}
       {budgetLimit > 0 && (
-        <div className="sticky top-[52px] z-30 mx-3 mt-2 rounded-xl overflow-hidden shadow-md animate-fade-in">
-          <div className="bg-gradient-to-l from-[#5D4037] to-[#8D6E63] text-white p-3">
-            <div className="flex items-center justify-between mb-2.5">
-              <div className="flex items-center gap-2 flex-1">
-                {isOverBudget && <AlertTriangle className="w-4 h-4 text-red-400 animate-pulse flex-shrink-0" />}
-                <div className="flex flex-col">
-                  <span className="text-[9px] opacity-80 font-bold mb-0.5">المتبقي من السقف</span>
-                  <span className={`text-xl font-black tracking-tight leading-none ${isOverBudget ? 'text-red-400' : 'text-yellow-400'}`} dir="ltr">
+        <div className="sticky top-[52px] z-30 mx-3 mt-2 rounded-lg overflow-hidden shadow-sm animate-fade-in border border-white/5">
+          <div className="bg-[#5D4037] text-white px-3 py-2 flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              {/* جهة المتبقي */}
+              <div className="flex flex-col">
+                <span className="text-[9px] opacity-70 font-bold">المتبقي</span>
+                <div className="flex items-center gap-1.5 leading-none">
+                  {isOverBudget && <AlertTriangle className="w-3.5 h-3.5 text-red-400 animate-pulse" />}
+                  <span className={`text-xl font-black ${isOverBudget ? 'text-red-400' : 'text-yellow-400'}`} dir="ltr">
                     {formatNumber(remaining)}
                   </span>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-1 text-[9px] opacity-90">
-                <div className="flex items-center gap-1.5 bg-black/20 px-2 py-0.5 rounded">
-                  <span>السقف:</span>
-                  <span className="font-bold text-xs" dir="ltr">{formatNumber(budgetLimit)}</span>
+
+              {/* السقف والاستهلاك */}
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col items-center bg-black/10 px-2 py-0.5 rounded min-w-[65px]">
+                  <span className="text-[8px] opacity-60">السقف</span>
+                  <span className="text-[11px] font-bold" dir="ltr">{formatNumber(budgetLimit)}</span>
                 </div>
-                <div className="flex items-center gap-1.5 bg-black/20 px-2 py-0.5 rounded">
-                  <span>الاستهلاك:</span>
-                  <span className="font-bold text-xs" dir="ltr">{formatNumber(totalDebit - totalCredit)}</span>
+                <div className="flex flex-col items-center bg-black/10 px-2 py-0.5 rounded min-w-[65px]">
+                  <span className="text-[8px] opacity-60">الاستهلاك</span>
+                  <span className="text-[11px] font-bold text-red-300" dir="ltr">{formatNumber(totalDebit - totalCredit)}</span>
                 </div>
               </div>
             </div>
-            <div className="w-full h-1.5 bg-black/30 rounded-full overflow-hidden shadow-inner">
+
+            {/* تم تعديل الارتفاع إلى h-2 ليكون أكثر وضوحاً */}
+            <div className="w-full h-2 bg-black/20 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-700 ease-out ${isOverBudget ? 'bg-red-500' : 'bg-yellow-400'}`}
                 style={{ width: `${Math.min(consumed, 100)}%` }}

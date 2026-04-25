@@ -397,12 +397,12 @@ const LedgerPage = () => {
                     <div className="text-left flex items-center justify-end gap-1.5 font-black text-[12px] w-full pr-1 tracking-tighter" dir="ltr">
                       <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
                       
-                      {/* السهم هنا يقرأ (tx.type) الخاص بالمعاملة ليتطابق لونه مع المبلغ المكتوب */}
-                      {tx.type === 'debit' ? (
+                      {/* العودة إلى المنطق الأساسي: السهم يعكس الرصيد التراكمي (tx.balance) */}
+                      {tx.balance >= 0 ? ( // عليه (أحمر للأسفل)
                         <svg width="9" height="9" viewBox="0 0 24 24" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
                           <path d="M12 21L0 3h24z" />
                         </svg>
-                      ) : (
+                      ) : ( // له (أخضر للأعلى)
                         <svg width="9" height="9" viewBox="0 0 24 24" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
                           <path d="M12 3l12 18H0z" />
                         </svg>

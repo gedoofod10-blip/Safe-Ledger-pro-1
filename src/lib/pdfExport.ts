@@ -82,15 +82,19 @@ export async function exportLedgerPDF(
 
     const blob: Blob = await html2pdf()
       .set({
-        margin: [10, 10, 10, 10], 
+        // زيادة الهوامش لتجنب القص العشوائي (Top, Left, Bottom, Right)
+        margin: [15, 10, 15, 10], 
         filename: `كشف_حساب_${client.name}_${new Date().toISOString().split('T')[0]}.pdf`,
         image: { type: 'jpeg', quality: 1 }, 
+        // السر هنا: منع قص الأسطر ونقلها كاملة للصفحة الجديدة
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.avoid-break'] },
         html2canvas: { 
           scale: 2,
           useCORS: true, 
           backgroundColor: '#ffffff',
           logging: false,
-          allowTaint: true
+          allowTaint: true,
+          windowWidth: 800 // تثبيت العرض لضمان عدم تشوه الجداول
         },
         jsPDF: { 
           unit: 'mm', 
@@ -125,7 +129,7 @@ function generatePDFHTML(
   
   const tableRows = sortedTxns
     .map((tx, i) => `
-      <tr style="background: ${i % 2 === 0 ? '#fcf9f2' : '#ffffff'};">
+      <tr style="background: ${i % 2 === 0 ? '#fcf9f2' : '#ffffff'}; page-break-inside: avoid; break-inside: avoid;">
         <td style="padding: 12px 10px; text-align: center; border-bottom: 1px solid #e5ddd0; font-size: 13px; font-weight: bold;">${tx.date}</td>
         <td style="padding: 12px 10px; text-align: center; border-bottom: 1px solid #e5ddd0; color: ${tx.type === 'debit' ? '#dc2626' : '#16a34a'}; font-weight: bold; font-size: 14px;">
           ${formatNumberEn(tx.amount)} ${tx.type === 'debit' ? '(-)' : '(+)'}
@@ -137,9 +141,9 @@ function generatePDFHTML(
     .join('');
 
   return `
-    <div id="pdf-content" style="direction: rtl; font-family: 'Arial', 'Tahoma', sans-serif; padding: 30px; width: 190mm; margin: 0 auto; background: white; color: #2d1a0d; box-sizing: border-box;">
+    <div id="pdf-content" style="direction: rtl; font-family: 'Arial', 'Tahoma', sans-serif; padding: 10px; width: 190mm; margin: 0 auto; background: white; color: #2d1a0d; box-sizing: border-box;">
       
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid #4a341c; padding-bottom: 20px;">
+      <div class="avoid-break" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid #4a341c; padding-bottom: 20px; page-break-inside: avoid; break-inside: avoid;">
         
         <div style="flex: 1; padding-top: 10px;">
           <h1 style="margin: 0 0 15px 0; font-size: 26px; color: #4a341c; font-weight: bold;">${shopName}</h1>
@@ -158,7 +162,7 @@ function generatePDFHTML(
         </div>
       </div>
       
-      <div style="display: flex; gap: 20px; margin-bottom: 30px;">
+      <div class="avoid-break" style="display: flex; gap: 20px; margin-bottom: 30px; page-break-inside: avoid; break-inside: avoid;">
         <div style="flex: 1; background: #fff1f2; padding: 20px 15px; border-radius: 10px; text-align: center; border: 1px solid #fecdd3;">
           <div style="font-size: 13px; color: #be123c; font-weight: bold; margin-bottom: 8px;">إجمالي عليه</div>
           <div style="font-size: 22px; font-weight: bold; color: #be123c;">${formatNumberEn(totalDebit)}</div>
@@ -177,8 +181,8 @@ function generatePDFHTML(
         </div>
       </div>
       
-      <table style="width: 100%; border-collapse: collapse; font-size: 14px; border: 1px solid #4a341c; border-radius: 4px; overflow: hidden;">
-        <thead>
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px; border: 1px solid #4a341c; border-radius: 4px; overflow: hidden; table-layout: fixed;">
+        <thead style="display: table-header-group; page-break-inside: avoid; break-inside: avoid;">
           <tr style="background: #4a341c; color: #fdfbf7;">
             <th style="padding: 14px 10px; text-align: center; font-weight: bold; border-right: 1px solid #5f4528; width: 100px;">التاريخ</th>
             <th style="padding: 14px 10px; text-align: center; font-weight: bold; border-right: 1px solid #5f4528; width: 130px;">المبلغ</th>
@@ -191,7 +195,7 @@ function generatePDFHTML(
         </tbody>
       </table>
       
-      <div style="margin-top: 40px; padding-top: 15px; border-top: 1px solid #e5ddd0; text-align: center;">
+      <div class="avoid-break" style="margin-top: 40px; padding-top: 15px; border-top: 1px solid #e5ddd0; text-align: center; page-break-inside: avoid; break-inside: avoid;">
         <p style="font-size: 13px; color: #666; font-weight: bold; margin: 0;">
           شكراً لتعاملكم معنا - تم إصدار هذا الكشف آلياً بواسطة تطبيق دفتر الحسابات
         </p>

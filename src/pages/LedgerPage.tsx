@@ -388,16 +388,16 @@ const LedgerPage = () => {
                       </span>
                     </div>
                     
-                    <div className="flex items-center justify-center px-1 h-full">
-                      <span className="text-center text-[11px] font-bold text-foreground leading-tight line-clamp-2 w-full break-words" title={tx.details}>
+                    {/* التعديل الجذري: إزالة line-clamp واستخدام overflow-hidden لحماية الحروف من القص في html2canvas */}
+                    <div className="flex items-center justify-center px-1 h-full overflow-hidden">
+                      <div className="text-center text-[11px] font-bold text-foreground leading-snug w-full break-words overflow-hidden" style={{ maxHeight: '40px' }} title={tx.details}>
                         {tx.details}
-                      </span>
+                      </div>
                     </div>
                     
                     <div className="text-left flex items-center justify-end gap-1.5 font-black text-[12px] w-full pr-1 tracking-tighter" dir="ltr">
                       <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
                       
-                      {/* هرم هندسي نقي لا يتأثر بإيموجي الهاتف أبداً، بلون أحمر للأسفل وأخضر للأعلى */}
                       {tx.balance >= 0 ? (
                         <svg width="9" height="9" viewBox="0 0 24 24" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
                           <path d="M12 21L0 3h24z" />

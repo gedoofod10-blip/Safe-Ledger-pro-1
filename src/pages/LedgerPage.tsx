@@ -228,11 +228,35 @@ const LedgerPage = () => {
   };
 
   const handleShareImage = async () => {
-    const t = toast.loading('جاري تجهيز الصورة...');
+    const t = toast.loading('جاري تجهيز الصورة (تأخذ ثوانٍ قليلة)...');
     try {
       const element = document.getElementById('ledger-content-to-capture');
       if (!element) return;
-      const canvas = await html2canvas(element, { useCORS: true, scale: 2, backgroundColor: '#ffffff' });
+
+      // الخدعة الاحترافية: نجبر العنصر على التمدد بالكامل قبل التقاط الصورة ليظهر الكشف كاملاً
+      const originalStyle = element.style.cssText;
+      element.style.height = 'auto';
+      element.style.maxHeight = 'none';
+      element.style.overflow = 'visible';
+
+      // قياس الارتفاع الكلي الفعلي بعد التمدد
+      const fullHeight = element.scrollHeight;
+      
+      // تقليل دقة التقاط الصورة إذا كان الكشف عملاقاً لتجنب تعليق الهاتف
+      const scale = fullHeight > 3000 ? 1 : 2;
+
+      const canvas = await html2canvas(element, { 
+        useCORS: true, 
+        scale: scale, 
+        backgroundColor: '#ffffff',
+        scrollY: -window.scrollY, // تجاهل موقع التمرير الحالي
+        windowHeight: fullHeight, // إجبار المكتبة على قراءة الارتفاع الكامل
+        height: fullHeight
+      });
+
+      // إعادة العنصر لشكله الطبيعي فوراً
+      element.style.cssText = originalStyle;
+
       canvas.toBlob(async (blob) => {
         toast.dismiss(t);
         if (blob) await safeShareFile(new File([blob], `كشف_${client?.name}.png`, { type: 'image/png' }));
@@ -337,6 +361,7 @@ const LedgerPage = () => {
         </div>
       )}
 
+      {/* إضافة id ليلتقط المكون بكامل تفاصيله وارتفاعه */}
       <div id="ledger-content-to-capture" className="p-2 flex-1 mt-1">
         <Card className="shadow-lg border-0 rounded-2xl overflow-hidden">
           <CardContent className="p-0">
@@ -368,7 +393,8 @@ const LedgerPage = () => {
                     onTouchEnd={handleTouchEnd}
                     onMouseDown={() => handleTouchStart(tx)}
                     onMouseUp={handleTouchEnd}
-                    className={`grid grid-cols-[65px_80px_1fr_85px] text-center px-1 items-center transition-colors relative h-[60px] ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
+                    // تم استخدام min-h-[62px] و py-2.5 لتجنب البتر، فالمربع سيتمدد بأمان إذا لزم الأمر
+                    className={`grid grid-cols-[65px_80px_1fr_85px] text-center px-1 py-2.5 items-center transition-colors relative min-h-[62px] ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
                     style={{ backgroundColor: tx.color || undefined }}
                   >
                     {isSelectionMode && (
@@ -388,21 +414,21 @@ const LedgerPage = () => {
                       </span>
                     </div>
                     
-                    <div className="flex items-center justify-center px-1 h-full overflow-hidden">
-                      <div className="text-center text-[11px] font-bold text-foreground leading-snug w-full break-words overflow-hidden" style={{ maxHeight: '40px' }} title={tx.details}>
+                    {/* تم إزالة overflow-hidden و max-height لضمان ظهور الكلمات كاملة وعدم بتر النقاط السفلية */}
+                    <div className="flex items-center justify-center px-1 h-full">
+                      <span className="text-center text-[11px] font-bold text-foreground leading-relaxed w-full break-words" title={tx.details}>
                         {tx.details}
-                      </div>
+                      </span>
                     </div>
                     
                     <div className="text-left flex items-center justify-end gap-1.5 font-black text-[12px] w-full pr-1 tracking-tighter" dir="ltr">
                       <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
                       
-                      {/* العودة إلى المنطق الأساسي: السهم يعكس الرصيد التراكمي (tx.balance) */}
-                      {tx.balance >= 0 ? ( // عليه (أحمر للأسفل)
+                      {tx.balance >= 0 ? (
                         <svg width="9" height="9" viewBox="0 0 24 24" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
                           <path d="M12 21L0 3h24z" />
                         </svg>
-                      ) : ( // له (أخضر للأعلى)
+                      ) : (
                         <svg width="9" height="9" viewBox="0 0 24 24" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
                           <path d="M12 3l12 18H0z" />
                         </svg>

@@ -367,7 +367,6 @@ const LedgerPage = () => {
               </div>
             )}
             
-            {/* الهيدر: تقسيم دقيق للمقاسات ليناسب ترتيب الأعمدة الجديد */}
             <div className="bg-[#5D4037] text-white grid grid-cols-[70px_85px_1fr_95px] text-center text-[12px] font-extrabold py-3.5 px-1 shadow-md">
               <div className="text-center pl-1">التاريخ</div>
               <div className="text-center">المبلغ</div>
@@ -388,7 +387,6 @@ const LedgerPage = () => {
                     onTouchEnd={handleTouchEnd}
                     onMouseDown={() => handleTouchStart(tx)}
                     onMouseUp={handleTouchEnd}
-                    // إعطاء مساحة مريحة `py-3.5` ليتمدد المربع بحرية بدون قص
                     className={`grid grid-cols-[70px_85px_1fr_95px] text-center px-1 py-3.5 items-center transition-colors relative ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
                     style={{ backgroundColor: tx.color || undefined }}
                   >
@@ -398,12 +396,10 @@ const LedgerPage = () => {
                       </div>
                     )}
                     
-                    {/* التاريخ */}
                     <div className={`text-center text-[10px] font-bold text-muted-foreground ${isSelectionMode ? 'pr-6' : ''}`}>
                       {tx.date}
                     </div>
                     
-                    {/* المبلغ: اصطفاف محاسبي (الأرقام فوق بعضها بدقة) */}
                     <div className="flex items-center justify-center w-full px-1" dir="ltr">
                       <span className={`font-black text-[13px] text-right w-[65px] tracking-tight ${tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}`}>
                         {tx.type === 'debit' ? '(-) ' : '(+) '}
@@ -411,27 +407,26 @@ const LedgerPage = () => {
                       </span>
                     </div>
                     
-                    {/* التفاصيل: مساحة حرة للتمدد مع تباعد مريح للأسطر */}
                     <div className="flex items-center justify-center px-1 h-full w-full">
                       <span className="text-center text-[12px] font-bold text-foreground leading-relaxed break-words w-full">
                         {tx.details}
                       </span>
                     </div>
                     
-                    {/* الرصيد التراكمي: المثلث ثابت على اليسار، والأرقام تصطف من اليمين (تناسق مثالي كالمسطرة) */}
-                    <div className="flex items-center justify-center w-full px-1" dir="ltr">
-                      {tx.balance >= 0 ? (
-                        <svg width="10" height="10" viewBox="0 0 24 24" className="text-red-600 fill-current flex-shrink-0 mr-1.5" aria-hidden="true">
-                          <path d="M12 21L0 3h24z" />
-                        </svg>
-                      ) : (
-                        <svg width="10" height="10" viewBox="0 0 24 24" className="text-green-600 fill-current flex-shrink-0 mr-1.5" aria-hidden="true">
-                          <path d="M12 3l12 18H0z" />
-                        </svg>
-                      )}
+                    {/* التعديل هنا: الرقم أولاً (على اليسار في وضع ltr) ثم يليه السهم مع مسافة (gap-1.5) ليكون الشكل (20,000 ▼) */}
+                    <div className="flex items-center justify-center w-full px-1 gap-1.5" dir="ltr">
                       <span className="font-black text-[13px] text-foreground/90 text-right w-[60px] tracking-tight">
                         {formatNumber(Math.abs(tx.balance))}
                       </span>
+                      {tx.balance >= 0 ? (
+                        <svg width="10" height="10" viewBox="0 0 24 24" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
+                          <path d="M12 21L0 3h24z" />
+                        </svg>
+                      ) : (
+                        <svg width="10" height="10" viewBox="0 0 24 24" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
+                          <path d="M12 3l12 18H0z" />
+                        </svg>
+                      )}
                     </div>
                   </div>
                 ))

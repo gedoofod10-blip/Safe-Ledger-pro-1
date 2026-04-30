@@ -233,28 +233,23 @@ const LedgerPage = () => {
       const element = document.getElementById('ledger-content-to-capture');
       if (!element) return;
 
-      // الخدعة الاحترافية: نجبر العنصر على التمدد بالكامل قبل التقاط الصورة ليظهر الكشف كاملاً
       const originalStyle = element.style.cssText;
       element.style.height = 'auto';
       element.style.maxHeight = 'none';
       element.style.overflow = 'visible';
 
-      // قياس الارتفاع الكلي الفعلي بعد التمدد
       const fullHeight = element.scrollHeight;
-      
-      // تقليل دقة التقاط الصورة إذا كان الكشف عملاقاً لتجنب تعليق الهاتف
       const scale = fullHeight > 3000 ? 1 : 2;
 
       const canvas = await html2canvas(element, { 
         useCORS: true, 
         scale: scale, 
         backgroundColor: '#ffffff',
-        scrollY: -window.scrollY, // تجاهل موقع التمرير الحالي
-        windowHeight: fullHeight, // إجبار المكتبة على قراءة الارتفاع الكامل
+        scrollY: -window.scrollY, 
+        windowHeight: fullHeight, 
         height: fullHeight
       });
 
-      // إعادة العنصر لشكله الطبيعي فوراً
       element.style.cssText = originalStyle;
 
       canvas.toBlob(async (blob) => {
@@ -361,7 +356,6 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* إضافة id ليلتقط المكون بكامل تفاصيله وارتفاعه */}
       <div id="ledger-content-to-capture" className="p-2 flex-1 mt-1">
         <Card className="shadow-lg border-0 rounded-2xl overflow-hidden">
           <CardContent className="p-0">
@@ -373,11 +367,12 @@ const LedgerPage = () => {
               </div>
             )}
             
-            <div className="bg-[#5D4037] text-white grid grid-cols-[65px_80px_1fr_85px] text-center text-[11px] font-extrabold py-3 px-1 shadow-md">
-              <div className="text-right pl-1">التاريخ</div>
-              <div>المبلغ</div>
+            {/* الهيدر: تقسيم دقيق للمقاسات ليناسب ترتيب الأعمدة الجديد */}
+            <div className="bg-[#5D4037] text-white grid grid-cols-[70px_85px_1fr_95px] text-center text-[12px] font-extrabold py-3.5 px-1 shadow-md">
+              <div className="text-center pl-1">التاريخ</div>
+              <div className="text-center">المبلغ</div>
               <div className="text-center">التفاصيل</div>
-              <div className="text-left pr-1">الرصيد</div>
+              <div className="text-center pr-1">الرصيد</div>
             </div>
             
             <div className="bg-white divide-y divide-border/40 select-none">
@@ -393,8 +388,8 @@ const LedgerPage = () => {
                     onTouchEnd={handleTouchEnd}
                     onMouseDown={() => handleTouchStart(tx)}
                     onMouseUp={handleTouchEnd}
-                    // تم استخدام min-h-[62px] و py-2.5 لتجنب البتر، فالمربع سيتمدد بأمان إذا لزم الأمر
-                    className={`grid grid-cols-[65px_80px_1fr_85px] text-center px-1 py-2.5 items-center transition-colors relative min-h-[62px] ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
+                    // إعطاء مساحة مريحة `py-3.5` ليتمدد المربع بحرية بدون قص
+                    className={`grid grid-cols-[70px_85px_1fr_95px] text-center px-1 py-3.5 items-center transition-colors relative ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
                     style={{ backgroundColor: tx.color || undefined }}
                   >
                     {isSelectionMode && (
@@ -403,36 +398,40 @@ const LedgerPage = () => {
                       </div>
                     )}
                     
-                    <div className={`text-right text-[9px] font-bold text-muted-foreground pl-1 ${isSelectionMode ? 'pr-6' : ''}`}>
+                    {/* التاريخ */}
+                    <div className={`text-center text-[10px] font-bold text-muted-foreground ${isSelectionMode ? 'pr-6' : ''}`}>
                       {tx.date}
                     </div>
                     
-                    <div className={`font-black text-[12px] tracking-tighter`} dir="ltr">
-                      <span className={tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}>
+                    {/* المبلغ: اصطفاف محاسبي (الأرقام فوق بعضها بدقة) */}
+                    <div className="flex items-center justify-center w-full px-1" dir="ltr">
+                      <span className={`font-black text-[13px] text-right w-[65px] tracking-tight ${tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}`}>
                         {tx.type === 'debit' ? '(-) ' : '(+) '}
                         {formatNumber(tx.amount)}
                       </span>
                     </div>
                     
-                    {/* تم إزالة overflow-hidden و max-height لضمان ظهور الكلمات كاملة وعدم بتر النقاط السفلية */}
-                    <div className="flex items-center justify-center px-1 h-full">
-                      <span className="text-center text-[11px] font-bold text-foreground leading-relaxed w-full break-words" title={tx.details}>
+                    {/* التفاصيل: مساحة حرة للتمدد مع تباعد مريح للأسطر */}
+                    <div className="flex items-center justify-center px-1 h-full w-full">
+                      <span className="text-center text-[12px] font-bold text-foreground leading-relaxed break-words w-full">
                         {tx.details}
                       </span>
                     </div>
                     
-                    <div className="text-left flex items-center justify-end gap-1.5 font-black text-[12px] w-full pr-1 tracking-tighter" dir="ltr">
-                      <span className="text-foreground/90">{formatNumber(Math.abs(tx.balance))}</span>
-                      
+                    {/* الرصيد التراكمي: المثلث ثابت على اليسار، والأرقام تصطف من اليمين (تناسق مثالي كالمسطرة) */}
+                    <div className="flex items-center justify-center w-full px-1" dir="ltr">
                       {tx.balance >= 0 ? (
-                        <svg width="9" height="9" viewBox="0 0 24 24" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
+                        <svg width="10" height="10" viewBox="0 0 24 24" className="text-red-600 fill-current flex-shrink-0 mr-1.5" aria-hidden="true">
                           <path d="M12 21L0 3h24z" />
                         </svg>
                       ) : (
-                        <svg width="9" height="9" viewBox="0 0 24 24" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
+                        <svg width="10" height="10" viewBox="0 0 24 24" className="text-green-600 fill-current flex-shrink-0 mr-1.5" aria-hidden="true">
                           <path d="M12 3l12 18H0z" />
                         </svg>
                       )}
+                      <span className="font-black text-[13px] text-foreground/90 text-right w-[60px] tracking-tight">
+                        {formatNumber(Math.abs(tx.balance))}
+                      </span>
                     </div>
                   </div>
                 ))

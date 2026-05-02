@@ -356,7 +356,7 @@ const LedgerPage = () => {
         </div>
       )}
 
-      {/* منطقة الكشف (بدون overflow-hidden لضمان عدم قص أي حرف عربي) */}
+      {/* منطقة الكشف */}
       <div id="ledger-content-to-capture" className="p-2 flex-1 mt-1">
         <Card className="shadow-lg border-0 rounded-2xl overflow-visible">
           <CardContent className="p-0">
@@ -368,7 +368,6 @@ const LedgerPage = () => {
               </div>
             )}
             
-            {/* الهيدر: استخدام Flexbox بالنسب المئوية لضمان التناسق المطلق على أي شاشة */}
             <div className="bg-[#5D4037] text-white flex flex-row w-full text-center text-[11px] font-extrabold py-3.5 px-1 shadow-md rounded-t-xl">
               <div className="w-[18%] flex-shrink-0">التاريخ</div>
               <div className="w-[27%] flex-shrink-0">المبلغ</div>
@@ -389,7 +388,6 @@ const LedgerPage = () => {
                     onTouchEnd={handleTouchEnd}
                     onMouseDown={() => handleTouchStart(tx)}
                     onMouseUp={handleTouchEnd}
-                    // إزالة القيود الصارمة (h-...) واستبدالها بـ min-h ليتمدد المربع بحرية بدون تداخل أو قص
                     className={`flex flex-row w-full items-center px-1 py-3 min-h-[60px] transition-colors relative ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
                     style={{ backgroundColor: tx.color || undefined }}
                   >
@@ -404,25 +402,25 @@ const LedgerPage = () => {
                       {tx.date}
                     </div>
                     
-                    {/* المبلغ: سطر واحد أفقي جبرياً (whitespace-nowrap) مع علامة +/- بجوار الرقم */}
-                    <div className="w-[27%] flex-shrink-0 flex justify-center items-center gap-1 whitespace-nowrap font-black text-[11px]" dir="ltr">
+                    {/* المبلغ: dir="rtl" تعني القراءة من اليمين، فستظهر علامة (+/-) أولاً ثم الرقم */}
+                    <div className="w-[27%] flex-shrink-0 flex justify-center items-center gap-1 whitespace-nowrap font-black text-[11px]" dir="rtl">
                       <span className={tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}>
                         {tx.type === 'debit' ? '(-)' : '(+)'}
                       </span>
-                      <span className={tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}>
+                      <span className={tx.type === 'debit' ? 'text-red-600' : 'text-green-600'} dir="ltr">
                         {formatNumber(tx.amount)}
                       </span>
                     </div>
                     
-                    {/* التفاصيل: مساحة حرة للتمدد مع تباعد سطور مريح جداً (leading-loose) لتجنب قص الحروف السفلية */}
+                    {/* التفاصيل */}
                     <div className="flex-1 flex justify-center items-center px-1">
                       <span className="text-center text-[11px] font-bold text-foreground leading-loose break-words w-full">
                         {tx.details}
                       </span>
                     </div>
                     
-                    {/* الرصيد: المثلث بجوار الرقم في سطر واحد أفقي (whitespace-nowrap) */}
-                    <div className="w-[27%] flex-shrink-0 flex justify-center items-center gap-1 whitespace-nowrap font-black text-[11px]" dir="ltr">
+                    {/* الرصيد: dir="rtl" ليظهر المثلث أولاً (على اليمين) ثم الرقم */}
+                    <div className="w-[27%] flex-shrink-0 flex justify-center items-center gap-1 whitespace-nowrap font-black text-[11px]" dir="rtl">
                       {tx.balance >= 0 ? (
                         <svg width="9" height="9" viewBox="0 0 24 24" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
                           <path d="M12 21L0 3h24z" />
@@ -432,7 +430,7 @@ const LedgerPage = () => {
                           <path d="M12 3l12 18H0z" />
                         </svg>
                       )}
-                      <span className="text-foreground/90">
+                      <span className="text-foreground/90" dir="ltr">
                         {formatNumber(Math.abs(tx.balance))}
                       </span>
                     </div>
@@ -446,21 +444,21 @@ const LedgerPage = () => {
 
       <footer className="fixed bottom-0 left-0 right-0 bg-[#5D4037] text-white p-2.5 z-40 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.15)]">
         <div className="flex items-center justify-between px-3 w-full gap-2">
-          {/* زر إضافة أصغر قليلاً */}
+          {/* زر إضافة مصغر */}
           <button onClick={() => navigate(`/add-transaction?clientId=${client?.id}`)} className="w-12 h-12 bg-white text-[#5D4037] rounded-xl flex items-center justify-center shadow-lg active:scale-95 transition-transform">
             <Plus className="w-6 h-6 font-black" />
           </button>
           
-          {/* الرصيد النهائي: مبرمج لونه بناءً على الحالة (أحمر إذا عليه، أخضر إذا له) وخط أصغر وأنيق */}
+          {/* الرصيد النهائي مصغر ومبرمج اللون */}
           <div className="flex flex-col items-center bg-black/20 py-1.5 px-4 rounded-xl flex-1">
             <span className="text-[10px] font-bold opacity-70 mb-0.5">الرصيد النهائي</span>
-            <div className={`flex items-center gap-1.5 ${netBalance >= 0 ? 'text-red-300' : 'text-green-300'}`}>
-              <span className="text-xs font-bold text-white">{netBalance >= 0 ? 'عليه' : 'له'}</span>
-              <span className="text-xl font-black" dir="ltr">{formatNumber(Math.abs(netBalance))}</span>
+            <div className={`flex items-center gap-1.5 ${netBalance >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+              <span className="text-[11px] font-bold text-white">{netBalance >= 0 ? 'عليه' : 'له'}</span>
+              <span className="text-lg font-black" dir="ltr">{formatNumber(Math.abs(netBalance))}</span>
             </div>
           </div>
           
-          {/* زر مشاركة أصغر قليلاً */}
+          {/* زر مشاركة مصغر */}
           <button onClick={() => setShowShareModal(true)} className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center active:scale-95 transition-transform">
             <Share2 className="w-5 h-5" />
           </button>

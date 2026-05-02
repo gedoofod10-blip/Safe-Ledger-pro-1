@@ -356,8 +356,9 @@ const LedgerPage = () => {
         </div>
       )}
 
+      {/* منطقة الكشف (بدون overflow-hidden لضمان عدم قص أي حرف عربي) */}
       <div id="ledger-content-to-capture" className="p-2 flex-1 mt-1">
-        <Card className="shadow-lg border-0 rounded-2xl overflow-hidden">
+        <Card className="shadow-lg border-0 rounded-2xl overflow-visible">
           <CardContent className="p-0">
             {showSearch && (
               <div className="p-3 bg-muted/10 border-b border-border flex items-center gap-2 animate-slide-down">
@@ -367,14 +368,15 @@ const LedgerPage = () => {
               </div>
             )}
             
-            <div className="bg-[#5D4037] text-white grid grid-cols-[70px_85px_1fr_95px] text-center text-[12px] font-extrabold py-3.5 px-1 shadow-md">
-              <div className="text-center pl-1">التاريخ</div>
-              <div className="text-center">المبلغ</div>
-              <div className="text-center">التفاصيل</div>
-              <div className="text-center pr-1">الرصيد</div>
+            {/* الهيدر: استخدام Flexbox بالنسب المئوية لضمان التناسق المطلق على أي شاشة */}
+            <div className="bg-[#5D4037] text-white flex flex-row w-full text-center text-[11px] font-extrabold py-3.5 px-1 shadow-md rounded-t-xl">
+              <div className="w-[18%] flex-shrink-0">التاريخ</div>
+              <div className="w-[27%] flex-shrink-0">المبلغ</div>
+              <div className="flex-1">التفاصيل</div>
+              <div className="w-[27%] flex-shrink-0">الرصيد</div>
             </div>
             
-            <div className="bg-white divide-y divide-border/40 select-none">
+            <div className="bg-white rounded-b-xl shadow-sm divide-y divide-border/40 select-none">
               {loading ? (
                 <div className="p-10 text-center font-bold text-muted-foreground">جاري التحميل...</div>
               ) : filteredTransactions.length === 0 ? (
@@ -387,7 +389,8 @@ const LedgerPage = () => {
                     onTouchEnd={handleTouchEnd}
                     onMouseDown={() => handleTouchStart(tx)}
                     onMouseUp={handleTouchEnd}
-                    className={`grid grid-cols-[70px_85px_1fr_95px] text-center px-1 py-3.5 items-center transition-colors relative ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
+                    // إزالة القيود الصارمة (h-...) واستبدالها بـ min-h ليتمدد المربع بحرية بدون تداخل أو قص
+                    className={`flex flex-row w-full items-center px-1 py-3 min-h-[60px] transition-colors relative ${idx % 2 === 0 ? 'bg-white' : 'bg-[#faf9f6]'}`}
                     style={{ backgroundColor: tx.color || undefined }}
                   >
                     {isSelectionMode && (
@@ -396,37 +399,42 @@ const LedgerPage = () => {
                       </div>
                     )}
                     
-                    <div className={`text-center text-[10px] font-bold text-muted-foreground ${isSelectionMode ? 'pr-6' : ''}`}>
+                    {/* التاريخ */}
+                    <div className={`w-[18%] flex-shrink-0 text-center text-[9px] font-bold text-muted-foreground whitespace-nowrap ${isSelectionMode ? 'pr-6' : ''}`}>
                       {tx.date}
                     </div>
                     
-                    <div className="flex items-center justify-center w-full px-1" dir="ltr">
-                      <span className={`font-black text-[13px] text-right w-[65px] tracking-tight ${tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}`}>
-                        {tx.type === 'debit' ? '(-) ' : '(+) '}
+                    {/* المبلغ: سطر واحد أفقي جبرياً (whitespace-nowrap) مع علامة +/- بجوار الرقم */}
+                    <div className="w-[27%] flex-shrink-0 flex justify-center items-center gap-1 whitespace-nowrap font-black text-[11px]" dir="ltr">
+                      <span className={tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}>
+                        {tx.type === 'debit' ? '(-)' : '(+)'}
+                      </span>
+                      <span className={tx.type === 'debit' ? 'text-red-600' : 'text-green-600'}>
                         {formatNumber(tx.amount)}
                       </span>
                     </div>
                     
-                    <div className="flex items-center justify-center px-1 h-full w-full">
-                      <span className="text-center text-[12px] font-bold text-foreground leading-relaxed break-words w-full">
+                    {/* التفاصيل: مساحة حرة للتمدد مع تباعد سطور مريح جداً (leading-loose) لتجنب قص الحروف السفلية */}
+                    <div className="flex-1 flex justify-center items-center px-1">
+                      <span className="text-center text-[11px] font-bold text-foreground leading-loose break-words w-full">
                         {tx.details}
                       </span>
                     </div>
                     
-                    {/* التعديل هنا: الرقم أولاً (على اليسار في وضع ltr) ثم يليه السهم مع مسافة (gap-1.5) ليكون الشكل (20,000 ▼) */}
-                    <div className="flex items-center justify-center w-full px-1 gap-1.5" dir="ltr">
-                      <span className="font-black text-[13px] text-foreground/90 text-right w-[60px] tracking-tight">
-                        {formatNumber(Math.abs(tx.balance))}
-                      </span>
+                    {/* الرصيد: المثلث بجوار الرقم في سطر واحد أفقي (whitespace-nowrap) */}
+                    <div className="w-[27%] flex-shrink-0 flex justify-center items-center gap-1 whitespace-nowrap font-black text-[11px]" dir="ltr">
                       {tx.balance >= 0 ? (
-                        <svg width="10" height="10" viewBox="0 0 24 24" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
+                        <svg width="9" height="9" viewBox="0 0 24 24" className="text-red-600 fill-current flex-shrink-0" aria-hidden="true">
                           <path d="M12 21L0 3h24z" />
                         </svg>
                       ) : (
-                        <svg width="10" height="10" viewBox="0 0 24 24" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
+                        <svg width="9" height="9" viewBox="0 0 24 24" className="text-green-600 fill-current flex-shrink-0" aria-hidden="true">
                           <path d="M12 3l12 18H0z" />
                         </svg>
                       )}
+                      <span className="text-foreground/90">
+                        {formatNumber(Math.abs(tx.balance))}
+                      </span>
                     </div>
                   </div>
                 ))
@@ -436,24 +444,30 @@ const LedgerPage = () => {
         </Card>
       </div>
 
-      <footer className="fixed bottom-0 left-0 right-0 bg-[#5D4037] text-white p-3 z-40 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.15)]">
-        <div className="flex items-center justify-between px-2 w-full">
-          <button onClick={() => navigate(`/add-transaction?clientId=${client?.id}`)} className="w-14 h-14 bg-white text-[#5D4037] rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-transform">
-            <Plus className="w-8 h-8 font-black" />
+      <footer className="fixed bottom-0 left-0 right-0 bg-[#5D4037] text-white p-2.5 z-40 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.15)]">
+        <div className="flex items-center justify-between px-3 w-full gap-2">
+          {/* زر إضافة أصغر قليلاً */}
+          <button onClick={() => navigate(`/add-transaction?clientId=${client?.id}`)} className="w-12 h-12 bg-white text-[#5D4037] rounded-xl flex items-center justify-center shadow-lg active:scale-95 transition-transform">
+            <Plus className="w-6 h-6 font-black" />
           </button>
-          <div className="flex flex-col items-center bg-black/20 py-2 px-6 rounded-2xl">
+          
+          {/* الرصيد النهائي: مبرمج لونه بناءً على الحالة (أحمر إذا عليه، أخضر إذا له) وخط أصغر وأنيق */}
+          <div className="flex flex-col items-center bg-black/20 py-1.5 px-4 rounded-xl flex-1">
             <span className="text-[10px] font-bold opacity-70 mb-0.5">الرصيد النهائي</span>
-            <div className="flex items-center gap-1">
-              <span className="text-xs font-bold">{netBalance >= 0 ? 'عليه' : 'له'}</span>
-              <span className={`text-2xl font-black ${netBalance >= 0 ? 'text-red-300' : 'text-green-300'}`} dir="ltr">{formatNumber(Math.abs(netBalance))}</span>
+            <div className={`flex items-center gap-1.5 ${netBalance >= 0 ? 'text-red-300' : 'text-green-300'}`}>
+              <span className="text-xs font-bold text-white">{netBalance >= 0 ? 'عليه' : 'له'}</span>
+              <span className="text-xl font-black" dir="ltr">{formatNumber(Math.abs(netBalance))}</span>
             </div>
           </div>
-          <button onClick={() => setShowShareModal(true)} className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center active:scale-95 transition-transform">
-            <Share2 className="w-6 h-6" />
+          
+          {/* زر مشاركة أصغر قليلاً */}
+          <button onClick={() => setShowShareModal(true)} className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center active:scale-95 transition-transform">
+            <Share2 className="w-5 h-5" />
           </button>
         </div>
       </footer>
 
+      {/* ---- المودالز والنوافذ المنبثقة تبقى كما هي ---- */}
       {showNotes && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-end justify-center animate-fade-in" onClick={() => {setShowNotes(false); setEditingNoteIdx(null);}}>
           <div className="bg-white w-full max-h-[85vh] rounded-t-3xl p-6 overflow-y-auto animate-slide-up shadow-2xl" onClick={e => e.stopPropagation()}>
